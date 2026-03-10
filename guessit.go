@@ -1,17 +1,13 @@
 package guessit
 
-import (
-	internalpostprocess "github.com/odwrtw/go-guessit/internal/postprocess"
-)
-
 // GuessIt parses a media filename and returns extracted metadata.
 func GuessIt(input string) Result {
-	parsed := internalpostprocess.Result{}
-	var matches []internalpostprocess.Match
+	parsed := parsedResult{}
+	var matches []match
 	set := func(name string, value any, start, end int, raw string) {
 		setParsedField(parsed, name, value)
 		if start >= 0 && end > start {
-			matches = append(matches, internalpostprocess.Match{
+			matches = append(matches, match{
 				Name:  name,
 				Value: value,
 				Start: start,
@@ -21,11 +17,11 @@ func GuessIt(input string) Result {
 		}
 	}
 	runSequentialParsers(input, set)
-	internalpostprocess.PostProcessResult(input, matches, parsed, &internalpostprocess.Options{})
+	postProcessResult(input, matches, parsed)
 	return resultFromParsed(parsed)
 }
 
-func setParsedField(parsed internalpostprocess.Result, name string, value any) {
+func setParsedField(parsed parsedResult, name string, value any) {
 	switch name {
 	case "type", "title", "screen_size", "release_group", "audio_codec", "video_codec", "container", "mimetype":
 		if s, ok := value.(string); ok {
@@ -40,7 +36,7 @@ func setParsedField(parsed internalpostprocess.Result, name string, value any) {
 	}
 }
 
-func resultFromParsed(parsed internalpostprocess.Result) Result {
+func resultFromParsed(parsed parsedResult) Result {
 	return Result{
 		Type:         stringValue(parsed["type"]),
 		Title:        stringValue(parsed["title"]),
