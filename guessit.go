@@ -1,56 +1,28 @@
 package guessit
 
 import (
-	"sync"
-
-	internalpatterns "github.com/odwrtw/go-guessit/internal/patterns"
 	internalpostprocess "github.com/odwrtw/go-guessit/internal/postprocess"
 )
 
-var (
-	defaultMatcher     Matcher
-	defaultMatcherOnce sync.Once
-)
-
 // GuessIt parses a media filename and returns extracted metadata.
-func GuessIt(input string, opts ...Option) Result {
-	options := NewOptions(opts...)
-	_ = SplitPathParts(input)
-	_ = FindGroups(input)
-	defaultMatcherOnce.Do(func() {
-		registerDefaultPatterns(&defaultMatcher)
-	})
-	matches := defaultMatcher.Match(input)
+func GuessIt(input string) Result {
 	parsed := internalpostprocess.Result{}
-	for _, m := range matches {
-		if !propertyEnabled(m.Name, options) {
-			continue
+	var matches []internalpostprocess.Match
+	set := func(name string, value any, start, end int, raw string) {
+		setParsedField(parsed, name, value)
+		if start >= 0 && end > start {
+			matches = append(matches, internalpostprocess.Match{
+				Name:  name,
+				Value: value,
+				Start: start,
+				End:   end,
+				Raw:   raw,
+			})
 		}
-		setParsedField(parsed, m.Name, m.Value)
 	}
-	internalpostprocess.PostProcessResult(input, matches, parsed, &internalpostprocess.Options{
-		TypeHint:      options.TypeHint,
-		ExpectedTitle: options.ExpectedTitle,
-		Includes:      options.Includes,
-		Excludes:      options.Excludes,
-	})
+	runSequentialParsers(input, set)
+	internalpostprocess.PostProcessResult(input, matches, parsed, &internalpostprocess.Options{})
 	return resultFromParsed(parsed)
-}
-
-func registerDefaultPatterns(m *Matcher) {
-	internalpatterns.RegisterDefault(m)
-}
-
-func propertyEnabled(name string, opts *Options) bool {
-	if len(opts.Includes) > 0 {
-		if _, ok := opts.Includes[name]; !ok {
-			return false
-		}
-	}
-	if _, denied := opts.Excludes[name]; denied {
-		return false
-	}
-	return true
 }
 
 func setParsedField(parsed internalpostprocess.Result, name string, value any) {

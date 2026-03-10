@@ -95,7 +95,6 @@ func convertOne(inPath, outPath string) error {
 			Opts:   opts,
 		}
 		outItems = append(outItems, out)
-		_ = i
 	}
 
 	payload, err := json.MarshalIndent(outItems, "", "  ")

@@ -4,8 +4,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	internalmatcher "github.com/odwrtw/go-guessit/internal/matcher"
 )
 
 var (
@@ -29,7 +27,15 @@ var (
 	reTokenSplit      = regexp.MustCompile(`[ ._]+`)
 )
 
-type Match = internalmatcher.Match
+type Match struct {
+	Name  string
+	Value any
+	Start int
+	End   int
+	Raw   string
+	Tags  []string
+}
+
 type Result map[string]any
 
 func (r Result) Get(name string) (any, bool) {
@@ -44,6 +50,7 @@ func (r Result) Set(name string, value any) {
 type Options struct {
 	TypeHint      string
 	ExpectedTitle string
+	ExpectedGroup string
 	Includes      map[string]struct{}
 	Excludes      map[string]struct{}
 }
@@ -72,6 +79,9 @@ func containsAnyHint(input string, hints []string) bool {
 func PostProcessResult(input string, matches []Match, result Result, opts *Options) {
 	deriveSeasonEpisode(result)
 	deriveProperCount(result)
+	if opts.ExpectedGroup != "" {
+		result.Set("release_group", opts.ExpectedGroup)
+	}
 	if propertyEnabled("release_group", opts) {
 		deriveReleaseGroup(input, result)
 	}
