@@ -61,7 +61,7 @@ func TestOutputJSONDiffSummary(t *testing.T) {
 		ours := GuessIt(row.FileName)
 		for _, m := range maps {
 			gv, gok := row.Expected[m.guessit]
-			ov, ook := ours[m.ours]
+			ov, ook := resultField(ours, m.ours)
 			ng := normalizeField(m.guessit, gv)
 			no := normalizeField(m.guessit, ov)
 			if gok && ng != "" {
@@ -222,22 +222,82 @@ func sortedFieldKeys(maps []fieldMap) []string {
 
 func TestGuessItStripsLeadingSeasonEpisodeFromTitle(t *testing.T) {
 	got := GuessIt("s01e01 Les petits fantômes .mp4")
-	title, ok := got["title"].(string)
-	if !ok {
+	if got.Title == "" {
 		t.Fatalf("missing title in result: %#v", got)
 	}
-	if title != "Les petits fantômes" {
-		t.Fatalf("unexpected title: got %q want %q", title, "Les petits fantômes")
+	if got.Title != "Les petits fantômes" {
+		t.Fatalf("unexpected title: got %q want %q", got.Title, "Les petits fantômes")
 	}
 }
 
 func TestGuessItDerivesReleaseGroupFromWebDLTail(t *testing.T) {
 	got := GuessIt("Twin.Peaks.S01E01.Pilot.720p.WEB-DL.x264.POOP.mp4")
-	group, ok := got["release_group"].(string)
-	if !ok {
+	if got.ReleaseGroup == "" {
 		t.Fatalf("missing release_group in result: %#v", got)
 	}
-	if group != "POOP" {
-		t.Fatalf("unexpected release_group: got %q want %q", group, "POOP")
+	if got.ReleaseGroup != "POOP" {
+		t.Fatalf("unexpected release_group: got %q want %q", got.ReleaseGroup, "POOP")
+	}
+}
+
+func resultField(r Result, key string) (any, bool) {
+	switch key {
+	case "type":
+		if r.Type == "" {
+			return nil, false
+		}
+		return r.Type, true
+	case "title":
+		if r.Title == "" {
+			return nil, false
+		}
+		return r.Title, true
+	case "episode":
+		if r.Episode == 0 {
+			return nil, false
+		}
+		return r.Episode, true
+	case "season":
+		if r.Season == 0 {
+			return nil, false
+		}
+		return r.Season, true
+	case "year":
+		if r.Year == 0 {
+			return nil, false
+		}
+		return r.Year, true
+	case "screen_size":
+		if r.ScreenSize == "" {
+			return nil, false
+		}
+		return r.ScreenSize, true
+	case "release_group":
+		if r.ReleaseGroup == "" {
+			return nil, false
+		}
+		return r.ReleaseGroup, true
+	case "audio_codec":
+		if r.AudioCodec == "" {
+			return nil, false
+		}
+		return r.AudioCodec, true
+	case "video_codec":
+		if r.VideoCodec == "" {
+			return nil, false
+		}
+		return r.VideoCodec, true
+	case "container":
+		if r.Container == "" {
+			return nil, false
+		}
+		return r.Container, true
+	case "mimetype":
+		if r.MIMEType == "" {
+			return nil, false
+		}
+		return r.MIMEType, true
+	default:
+		return nil, false
 	}
 }

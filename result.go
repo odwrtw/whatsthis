@@ -1,15 +1,16 @@
 package guessit
 
 // Result is the parsed metadata.
-type Result map[string]any
-
-// Get returns a value and whether it exists.
-func (r Result) Get(name string) (any, bool) {
-	v, ok := r[name]
-	return v, ok
-}
-
-// Set stores a value.
-func (r Result) Set(name string, value any) {
-	r[name] = value
+type Result struct {
+	Type         string `json:"type,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Episode      int    `json:"episode,omitempty"`
+	Season       int    `json:"season,omitempty"`
+	Year         int    `json:"year,omitempty"`
+	ScreenSize   string `json:"screen_size,omitempty"`
+	ReleaseGroup string `json:"release_group,omitempty"`
+	AudioCodec   string `json:"audio_codec,omitempty"`
+	VideoCodec   string `json:"video_codec,omitempty"`
+	Container    string `json:"container,omitempty"`
+	MIMEType     string `json:"mimetype,omitempty"`
 }
