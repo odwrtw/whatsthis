@@ -11,14 +11,34 @@ type Entry struct {
 	Expected Guess  `json:"expected"`
 }
 
-func TestGuess(t *testing.T) {
-	content, err := os.ReadFile("testdata.json")
+func TestGuessMovies(t *testing.T) {
+	filename := "tests/movies-testdata.json"
+	content, err := os.ReadFile(filename)
 	if err != nil {
-		t.Skip("testdata.json not available")
+		t.Skipf("%s not available", filename)
 	}
 	var entries []Entry
 	if err := json.Unmarshal(content, &entries); err != nil {
-		t.Fatalf("invalid testdata.json: %+v", err)
+		t.Fatalf("invalid %s: %+v", filename, err)
+	}
+	for _, e := range entries {
+		ourGuess := GuessIt(e.FileName)
+		if ourGuess != e.Expected {
+			t.Errorf("filename:%s\nOurs:%+v\nexpected:%+v\n", e.FileName, ourGuess, e.Expected)
+			t.Fail()
+		}
+	}
+}
+
+func TestGuessTvShows(t *testing.T) {
+	filename := "tests/tvshows-testdata.json"
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		t.Skipf("%s not available", filename)
+	}
+	var entries []Entry
+	if err := json.Unmarshal(content, &entries); err != nil {
+		t.Fatalf("invalid %s: %+v", filename, err)
 	}
 	for _, e := range entries {
 		ourGuess := GuessIt(e.FileName)

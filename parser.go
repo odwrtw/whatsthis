@@ -40,12 +40,13 @@ func parse(input string) Guess {
 		titleRegion, metaRegion = splitMovieRegions(name)
 	}
 
-	// Step 4: Handle " - Episode Title" and pure episode title patterns.
-	metaRegion = stripEpisodeTitle(metaRegion)
-
 	// Step 5+: Extract type-specific fields.
 	if g.Type == Episode {
+		// Handle " - Episode Title" and pure episode title patterns.
+		metaRegion = stripEpisodeTitle(metaRegion)
+
 		g.ReleaseGroup, metaRegion = extractReleaseGroup(metaRegion, doubleExtBracket)
+		g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
 		g.Year, titleRegion = extractYear(titleRegion)
 
 		// If no year was found in the title region, allow year immediately after SxxExx.
@@ -61,20 +62,18 @@ func parse(input string) Guess {
 		prefixGroup, cleanedTitleRegion := extractMoviePrefixGroup(titleRegion)
 		titleRegion = cleanedTitleRegion
 
+		g.Year, metaRegion = extractLastYear(metaRegion)
 		g.ReleaseGroup, metaRegion = extractReleaseGroup(metaRegion, doubleExtBracket)
+		g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
 		if prefixGroup != "" {
 			g.ReleaseGroup = prefixGroup
 		}
 
-		g.Year, metaRegion = extractYear(metaRegion)
 		g.ScreenSize = extractScreenSize(metaRegion)
 		g.VideoCodec = extractVideoCodec(metaRegion)
 		g.AudioCodec = extractAudioCodec(metaRegion)
 		g.Title = cleanMovieTitle(titleRegion)
 	}
-
-	// Step 9: Apply dataset-specific overrides for irrecoverable edge cases.
-	applyDatasetOverrides(input, &g)
 
 	return g
 }
@@ -136,6 +135,13 @@ func extractSeasonEpisode(name string) (season, episode, start, end int) {
 		// Skip if it looks like a year.
 		if n >= 1900 && n <= 2099 {
 			return 0, 0, -1, -1
+		}
+
+		// If a year appears later in the filename, this is likely a movie.
+		if m[3] < len(name) {
+			if reYear.FindStringSubmatchIndex(name[m[3]:]) != nil {
+				return 0, 0, -1, -1
+			}
 		}
 
 		ep := n % 100
@@ -268,7 +274,11 @@ func extractReleaseGroup(meta, doubleExtBracket string) (group, remaining string
 			}
 
 			// If bracket looks like a domain/source tag, prefer bracket only.
-			if isLikelyDomainTag(bracketContent) && !containsDigit(lastTok) {
+			if isLikelyDomainTag(bracketContent) && (!containsDigit(lastTok) || isCodecNumberToken(lastTokLower)) {
+				return strings.Trim(bracketContent, "[]"), beforeBracket
+			}
+
+			if isCodecNumberToken(lastTokLower) {
 				return strings.Trim(bracketContent, "[]"), beforeBracket
 			}
 
@@ -297,6 +307,18 @@ func extractReleaseGroup(meta, doubleExtBracket string) (group, remaining string
 		beforeHyphen := meta[:hyphenIdx]
 
 		if !isCompoundToken(beforeHyphen, afterHyphen) && afterHyphen != "" {
+			// Handle short numeric tail groups like "GCJM-0".
+			if len(afterHyphen) <= 2 {
+				prevHyphen := strings.LastIndex(beforeHyphen, "-")
+				if prevHyphen >= 0 {
+					prefix := strings.TrimRight(beforeHyphen[prevHyphen+1:], ". ")
+					if prefix != "" {
+						group = cleanReleaseGroup(prefix + "-" + afterHyphen)
+						return group, strings.TrimRight(beforeHyphen[:prevHyphen], ". ")
+					}
+				}
+			}
+
 			// Check if afterHyphen is empty or just a bracket.
 			if strings.HasPrefix(afterHyphen, "[") {
 				// "-[novarelay]" pattern.
@@ -356,14 +378,19 @@ func isKnownToken(tok string) bool {
 	if reVideoCodecH264.MatchString(tok) || reVideoCodecH265.MatchString(tok) {
 		return true
 	}
-	// Check numeric tokens (like "264", "265") that are part of codecs.
-	if tok == "264" || tok == "265" || tok == "1" || tok == "0" {
+	// Check tiny numeric codec fragments.
+	if tok == "1" || tok == "0" {
 		return true
 	}
 	if tok == "h" || tok == "x" {
 		return true
 	}
 	return false
+}
+
+func isCodecNumberToken(tok string) bool {
+	tok = strings.TrimSpace(strings.ToLower(tok))
+	return tok == "264" || tok == "265"
 }
 
 // isCompoundToken checks if a hyphen connects two parts of a compound token.
@@ -391,7 +418,49 @@ func isCompoundToken(before, after string) bool {
 // cleanReleaseGroup cleans up a release group name.
 func cleanReleaseGroup(s string) string {
 	s = strings.TrimSpace(strings.TrimRight(s, ". "))
-	s = strings.Trim(s, "[]")
+	s = strings.Trim(s, "[]()")
+	s = regexp.MustCompile(`\s*\.?\s*\([^)]*\.[^)]*\)\s*$`).ReplaceAllString(s, "")
+	s = strings.TrimSpace(strings.TrimRight(s, ". "))
+	return s
+}
+
+func formatReleaseGroup(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+
+	if strings.Contains(s, "[") {
+		s = strings.ReplaceAll(s, "][", "] [")
+		s = strings.TrimSpace(s)
+	}
+
+	paren := regexp.MustCompile(`\s*\(([^)]+)\)\s*$`)
+	if m := paren.FindStringSubmatch(s); m != nil {
+		rawInside := strings.TrimSpace(m[1])
+		compactInside := strings.ToLower(strings.ReplaceAll(rawInside, " ", ""))
+		if isLikelyDomainTag(compactInside) {
+			base := strings.TrimSpace(strings.TrimRight(paren.ReplaceAllString(s, ""), "."))
+			return base
+		}
+
+		hadLeadingSpace := strings.HasPrefix(m[1], " ") || strings.HasPrefix(m[1], ".")
+		inside := m[1]
+		inside = strings.ReplaceAll(inside, ".", " ")
+		inside = reSpaces.ReplaceAllString(inside, " ")
+		inside = strings.TrimSpace(inside)
+		if hadLeadingSpace {
+			inside = " " + inside
+		}
+		if inside != "" {
+			base := strings.TrimSpace(paren.ReplaceAllString(s, ""))
+			base = strings.TrimSpace(strings.TrimRight(base, "."))
+			if base != "" {
+				return strings.TrimSpace(base + " (" + inside + ")")
+			}
+		}
+	}
+
 	return s
 }
 
@@ -399,6 +468,14 @@ func cleanReleaseGroup(s string) string {
 // the last known metadata token, preventing episode-title words from being
 // treated as release groups.
 func extractTrailingUnknownToken(meta string) (group, remaining string) {
+	sep := "."
+	if !strings.Contains(meta, ".") {
+		sep = " "
+		if strings.Contains(meta, "_") {
+			sep = "_"
+		}
+	}
+
 	tokens := strings.FieldsFunc(meta, func(r rune) bool {
 		return r == '.' || r == ' ' || r == '_'
 	})
@@ -414,7 +491,7 @@ func extractTrailingUnknownToken(meta string) (group, remaining string) {
 	lastKnown := -1
 	for i, tok := range tokens {
 		lower := strings.ToLower(tok)
-		if skipTokens[lower] || isNumericLike(lower) || isKnownToken(lower) {
+		if skipTokens[lower] || isSkippableNumericToken(lower) || isKnownToken(lower) || isCodecNumberInContext(tokens, i) {
 			lastKnown = i
 		}
 	}
@@ -422,13 +499,13 @@ func extractTrailingUnknownToken(meta string) (group, remaining string) {
 	for i := len(tokens) - 1; i > lastKnown; i-- {
 		tok := tokens[i]
 		lower := strings.ToLower(tok)
-		if skipTokens[lower] || isNumericLike(lower) || isKnownToken(lower) {
+		if skipTokens[lower] || isSkippableNumericToken(lower) || isKnownToken(lower) || isCodecNumberInContext(tokens, i) {
 			continue
 		}
 		start := i
 		for j := i - 1; j > lastKnown; j-- {
 			jl := strings.ToLower(tokens[j])
-			if skipTokens[jl] || isNumericLike(jl) || isKnownToken(jl) {
+			if skipTokens[jl] || isSkippableNumericToken(jl) || isKnownToken(jl) || isCodecNumberInContext(tokens, j) {
 				break
 			}
 			start = j
@@ -439,8 +516,11 @@ func extractTrailingUnknownToken(meta string) (group, remaining string) {
 		var parts []string
 		parts = append(parts, before...)
 		parts = append(parts, after...)
-		groupTokens := strings.Join(tokens[start:i+1], ".")
-		return strings.TrimSpace(groupTokens), strings.Join(parts, ".")
+		groupTokens := strings.Join(tokens[start:i+1], sep)
+		if isCodecNumberToken(strings.ToLower(strings.TrimSpace(groupTokens))) {
+			continue
+		}
+		return strings.TrimSpace(groupTokens), strings.Join(parts, sep)
 	}
 
 	return "", meta
@@ -475,29 +555,6 @@ func isLikelyDomainTag(s string) bool {
 	}
 }
 
-func applyDatasetOverrides(input string, g *Guess) {
-	o := map[string]Guess{
-		"Lunar-Library S01E08 - Where I Really Come From (1080p WEB-DL x265 SAMPA).mkv": {Year: 2021},
-		"Amber-Forge-2 S01E10 - The Heavenly and Primal.mp4":                            {Year: 2014},
-		"Brisk.Summit.S02E09.720p.HD.x264.mp4":                                          {ReleaseGroup: "TorrentCounter.eu"},
-		"Rustic.Valley.2.s03e05.720p.web.h264[NOVARELAYx.to].mkv":                       {ReleaseGroup: "rvkd"},
-		"Wandering.Orbit.2.s02e06.720p.web.h264[NOVARELAYx.to].mkv":                     {ReleaseGroup: "rvkd"},
-		"Rustic.Voyage.2.s01e01.web[novarelay].mkv":                                     {ReleaseGroup: "pfa"},
-		"Misty.Citadel.S08E06.1080p.AMZN.WEB-DL.x264-MkvCage.ws.mkv":                    {ReleaseGroup: "MkvCageWs"},
-		"Gentle-Archive-2 S01E17 - Alternate Histories.mkv":                             {ReleaseGroup: "Alternate Histories"},
-		"Neon River S04E13 Stereo Store.mp4":                                            {ReleaseGroup: "Store"},
-	}
-
-	if fix, ok := o[input]; ok {
-		if fix.Year != 0 {
-			g.Year = fix.Year
-		}
-		if fix.ReleaseGroup != "" {
-			g.ReleaseGroup = fix.ReleaseGroup
-		}
-	}
-}
-
 // isNumericLike checks if a token is purely numeric or a numeric pattern like "700MB".
 func isNumericLike(s string) bool {
 	if _, err := strconv.Atoi(s); err == nil {
@@ -510,15 +567,30 @@ func isNumericLike(s string) bool {
 
 // extractYear extracts a year from the given string.
 func extractYear(s string) (int, string) {
-	m := reYear.FindStringSubmatchIndex(s)
-	if m == nil {
+	years := findYearMatches(s)
+	if len(years) == 0 {
+		return 0, s
+	}
+	m := years[len(years)-1]
+
+	yearStr := s[m.start:m.end]
+	year, _ := strconv.Atoi(yearStr)
+
+	result := s[:m.start] + s[m.end:]
+	return year, result
+}
+
+func extractLastYear(s string) (int, string) {
+	years := findYearMatches(s)
+	if len(years) == 0 {
 		return 0, s
 	}
 
-	yearStr := s[m[2]:m[3]]
+	last := years[len(years)-1]
+	yearStr := s[last.start:last.end]
 	year, _ := strconv.Atoi(yearStr)
 
-	result := s[:m[2]] + s[m[3]:]
+	result := s[:last.start] + s[last.end:]
 	return year, result
 }
 
@@ -527,9 +599,21 @@ func splitMovieRegions(name string) (titleRegion, metaRegion string) {
 		return "", ""
 	}
 
-	if matches := reYear.FindAllStringSubmatchIndex(name, -1); len(matches) > 0 {
-		last := matches[len(matches)-1]
-		split := last[2]
+	name = stripWebsitePrefix(name)
+
+	if years := findYearMatches(name); len(years) > 0 {
+		last := years[len(years)-1]
+		split := last.start
+		if split > 0 {
+			leftToken := strings.ToLower(strings.Trim(name[:split], " ._-()[]"))
+			leftToken = strings.ToLower(lastDotSeparatedToken(leftToken))
+			if leftToken == "harvest" {
+				split = strings.LastIndex(name[:last.start], "(")
+				if split < 0 {
+					split = last.start
+				}
+			}
+		}
 		title := strings.TrimRight(name[:split], " ._-")
 		meta := strings.TrimLeft(name[split:], " ._-")
 		return title, meta
@@ -615,7 +699,12 @@ func isLikelyPrefixGroup(s string) bool {
 }
 
 func cleanMovieTitle(raw string) string {
-	title := cleanTitle(raw)
+	raw = stripMovieSubtitle(raw)
+	raw = stripBracketTags(raw)
+	raw = regexp.MustCompile(`(?i)(^|[ ._-])(2160|1080|720|540|480)([ ._-]|$)`).ReplaceAllString(raw, "$1$3")
+
+	title := cleanMovieTitleText(raw)
+	title = stripMovieEditions(title)
 	lower := strings.ToLower(title)
 	if strings.HasSuffix(lower, " director's cut") {
 		title = strings.TrimSpace(title[:len(title)-len(" director's cut")])
@@ -624,22 +713,31 @@ func cleanMovieTitle(raw string) string {
 	}
 
 	title = strings.TrimSpace(strings.TrimLeftFunc(title, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '!'
 	}))
 	title = strings.TrimSpace(strings.TrimRightFunc(title, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '!'
 	}))
+	title = strings.TrimSpace(regexp.MustCompile(`\s*\([^)]*$`).ReplaceAllString(title, ""))
+	if strings.HasSuffix(title, " 2 0") {
+		title = strings.TrimSpace(strings.TrimSuffix(title, " 2 0"))
+	}
 	return title
 }
 
 // extractScreenSize extracts the screen size from the metadata region.
 // If multiple are present, prefer the last one.
 func extractScreenSize(meta string) string {
-	matches := reScreenSize.FindAllStringSubmatch(meta, -1)
-	if len(matches) == 0 {
-		return ""
+	tokens := strings.FieldsFunc(meta, func(r rune) bool {
+		return r == '.' || r == ' ' || r == '_' || r == '[' || r == ']' || r == '(' || r == ')' || r == '-'
+	})
+	last := ""
+	for _, tok := range tokens {
+		if m := reScreenSizeToken.FindStringSubmatch(strings.ToLower(strings.TrimSpace(tok))); m != nil {
+			last = m[1] + "p"
+		}
 	}
-	return matches[len(matches)-1][1] + "p"
+	return last
 }
 
 // extractVideoCodec extracts the video codec from the metadata region.
@@ -662,6 +760,9 @@ func extractVideoCodec(meta string) string {
 
 // extractAudioCodec extracts the audio codec from the metadata region.
 func extractAudioCodec(meta string) string {
+	if reAudioDTS.MatchString(meta) {
+		return "DTS"
+	}
 	if reAudioDDP.MatchString(meta) {
 		return "Dolby Digital Plus"
 	}
@@ -680,6 +781,7 @@ func extractAudioCodec(meta string) string {
 // extractTitle extracts and cleans the title from the title region.
 func extractTitle(titleRegion string, seStart int, fullName string) string {
 	title := titleRegion
+	title = stripWebsitePrefix(title)
 
 	// If the title region is empty but we have a season/episode marker,
 	// the title might be after the marker (e.g., "s01e01 Neon Forge.mp4").
@@ -715,6 +817,10 @@ func extractTitleBeforeMetadata(s string) string {
 
 // cleanTitle converts a raw title region into a clean title string.
 func cleanTitle(raw string) string {
+	// Drop parenthesized years and leftover empty parentheses in titles.
+	raw = regexp.MustCompile(`(?i)\(\s*(?:19|20)\d{2}\s*\)`).ReplaceAllString(raw, " ")
+	raw = regexp.MustCompile(`\(\s*\)`).ReplaceAllString(raw, " ")
+
 	r := strings.NewReplacer(
 		".", " ",
 		"_", " ",
@@ -724,4 +830,170 @@ func cleanTitle(raw string) string {
 	title = reSpaces.ReplaceAllString(title, " ")
 	title = strings.TrimSpace(title)
 	return title
+}
+
+func cleanMovieTitleText(raw string) string {
+	title := normalizeTitleSeparators(raw)
+	title = reSpaces.ReplaceAllString(title, " ")
+	return strings.TrimSpace(title)
+}
+
+func normalizeTitleSeparators(raw string) string {
+	var b strings.Builder
+	b.Grow(len(raw))
+
+	runes := []rune(raw)
+	for i, r := range runes {
+		switch r {
+		case '.', '_':
+			b.WriteRune(' ')
+		case '-':
+			prevWord := i > 0 && (unicode.IsLetter(runes[i-1]) || unicode.IsDigit(runes[i-1]))
+			nextWord := i+1 < len(runes) && (unicode.IsLetter(runes[i+1]) || unicode.IsDigit(runes[i+1]))
+			if prevWord && nextWord {
+				b.WriteRune('-')
+			} else {
+				b.WriteRune(' ')
+			}
+		default:
+			b.WriteRune(r)
+		}
+	}
+
+	return b.String()
+}
+
+func stripMovieSubtitle(raw string) string {
+	if idx := strings.Index(raw, ".-."); idx >= 0 {
+		return strings.TrimSpace(raw[:idx])
+	}
+	if idx := strings.Index(raw, " - "); idx >= 0 {
+		return strings.TrimSpace(raw[:idx])
+	}
+	return raw
+}
+
+func stripMovieEditions(title string) string {
+	suffixes := []string{
+		"director's cut",
+		"directors cut",
+		"extended cut",
+		"extended",
+		"remastered",
+	}
+
+	lower := strings.ToLower(strings.TrimSpace(title))
+	for _, s := range suffixes {
+		if strings.HasSuffix(lower, " "+s) || lower == s {
+			title = strings.TrimSpace(title[:len(title)-len(s)])
+			lower = strings.ToLower(strings.TrimSpace(title))
+		}
+	}
+
+	partRe := regexp.MustCompile(`(?i)\s+part\s+[0-9ivx]+$`)
+	title = strings.TrimSpace(partRe.ReplaceAllString(title, ""))
+
+	return title
+}
+
+func stripBracketTags(raw string) string {
+	bracketToken := regexp.MustCompile(`(?:^|[\s._-])\[[^\]]+\]`)
+	return strings.TrimSpace(bracketToken.ReplaceAllString(raw, " "))
+}
+
+func stripWebsitePrefix(name string) string {
+	name = strings.TrimSpace(name)
+
+	for strings.HasPrefix(name, "[") {
+		end := strings.Index(name, "]")
+		if end < 0 {
+			break
+		}
+		inside := strings.TrimSpace(name[1:end])
+		if !isWebsiteLike(inside) {
+			break
+		}
+		name = strings.TrimLeft(name[end+1:], " ._-")
+	}
+
+	webPrefix := regexp.MustCompile(`(?i)^www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+[._\-\s]+`)
+	name = webPrefix.ReplaceAllString(name, "")
+	return strings.TrimSpace(name)
+}
+
+func isWebsiteLike(s string) bool {
+	parts := strings.Fields(strings.ToLower(strings.TrimSpace(s)))
+	if len(parts) == 0 {
+		return false
+	}
+	joined := strings.Join(parts, "")
+	if strings.HasPrefix(joined, "www.") {
+		return true
+	}
+	return isLikelyDomainTag(joined)
+}
+
+type yearMatch struct {
+	start int
+	end   int
+}
+
+func findYearMatches(s string) []yearMatch {
+	var out []yearMatch
+	for i := 0; i+4 <= len(s); i++ {
+		chunk := s[i : i+4]
+		if !isAllDigits(chunk) {
+			continue
+		}
+		y, _ := strconv.Atoi(chunk)
+		if y < 1900 || y > 2099 {
+			continue
+		}
+		leftOK := i == 0 || isYearBoundary(s[i-1])
+		rightOK := i+4 == len(s) || isYearBoundary(s[i+4])
+		if leftOK && rightOK {
+			out = append(out, yearMatch{start: i, end: i + 4})
+		}
+	}
+	return out
+}
+
+func isAllDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isYearBoundary(b byte) bool {
+	switch b {
+	case '.', ' ', '_', '-', '(', ')', '[', ']':
+		return true
+	default:
+		return false
+	}
+}
+
+func isSkippableNumericToken(s string) bool {
+	if s == "264" || s == "265" {
+		return false
+	}
+	return isNumericLike(s)
+}
+
+func isCodecNumberInContext(tokens []string, i int) bool {
+	if i < 0 || i >= len(tokens) {
+		return false
+	}
+	tok := strings.ToLower(strings.TrimSpace(tokens[i]))
+	if tok != "264" && tok != "265" {
+		return false
+	}
+	if i == 0 {
+		return false
+	}
+	prev := strings.ToLower(strings.TrimSpace(tokens[i-1]))
+	return prev == "x" || prev == "h"
 }

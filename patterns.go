@@ -16,10 +16,14 @@ var (
 )
 
 // Year pattern: 4-digit year between 1900 and 2099.
-var reYear = regexp.MustCompile(`(?:^|[.\s])(((?:19|20)\d{2}))(?:[.\s]|$)`)
+// Boundaries include dots, spaces, underscores, parentheses, and brackets.
+var reYear = regexp.MustCompile(`(?:^|[.\s_(\[\]])(((?:19|20)\d{2}))(?:[.\s_)\]]|$)`)
 
 // Screen size patterns.
-var reScreenSize = regexp.MustCompile(`(?i)\b(2160|1080|720|540|480)p\b`)
+var reScreenSize = regexp.MustCompile(`(?i)(?:^|[.\s_\[(])(2160|1080|720|540|480)p(?:$|[.\s_\])])`)
+
+// Screen size token pattern.
+var reScreenSizeToken = regexp.MustCompile(`(?i)^(2160|1080|720|540|480)p$`)
 
 // Video codec patterns.
 var (
@@ -44,6 +48,9 @@ var (
 
 	// AAC with optional channel config.
 	reAudioAAC = regexp.MustCompile(`(?i)\bAAC(?:[\s.]?\d[\s.]?\d)?\b`)
+
+	// DTS audio codec.
+	reAudioDTS = regexp.MustCompile(`(?i)\bDTS(?:[\s.-]?(?:HD|MA|ES))?\b`)
 )
 
 // Container / MIME type mappings.
@@ -77,7 +84,9 @@ var knownMetadataTokens = map[string]bool{
 	"proper": true, "repack": true, "internal": true, "real": true,
 	"hdr": true, "10bit": true, "6ch": true, "5.1": true, "2.0": true,
 	"dd5": true, "dd2": true, "ddp5": true, "ddp2": true, "dd+5": true, "dd+2": true,
-	"hd": true,
+	"hd":     true,
+	"dvdscr": true, "camrip": true, "hdts": true, "hdcam": true,
+	"new": true, "dual": true, "vof": true,
 }
 
 // Episode title separator: " - " after SxxExx indicates an episode title, not a release group.
