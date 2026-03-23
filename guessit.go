@@ -1,3 +1,5 @@
+// Package guessit extracts structured metadata (title, year, quality, codec,
+// release group, etc.) from video filenames.
 package guessit
 
 // Type represents the type of media (episode, movie, etc.).
@@ -22,7 +24,6 @@ type Guess struct {
 	AudioCodec   string `json:"audio_codec"`
 	VideoCodec   string `json:"video_codec"`
 	Container    string `json:"container"`
-	Format       string `json:"format"`
 	MimeType     string `json:"mimetype"`
 }
 

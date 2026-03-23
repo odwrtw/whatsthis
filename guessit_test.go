@@ -6,45 +6,36 @@ import (
 	"testing"
 )
 
-type Entry struct {
+type entry struct {
 	FileName string `json:"filename"`
 	Expected Guess  `json:"expected"`
 }
 
-func TestGuessMovies(t *testing.T) {
-	filename := "tests/movies-testdata.json"
-	content, err := os.ReadFile(filename)
+func testGuessFromFile(t *testing.T, filename string) {
+	t.Helper()
+
+	content, err := os.ReadFile(filename) //nolint:gosec // test data paths are not user-controlled
 	if err != nil {
 		t.Skipf("%s not available", filename)
 	}
-	var entries []Entry
+
+	var entries []entry
 	if err := json.Unmarshal(content, &entries); err != nil {
 		t.Fatalf("invalid %s: %+v", filename, err)
 	}
+
 	for _, e := range entries {
-		ourGuess := GuessIt(e.FileName)
-		if ourGuess != e.Expected {
-			t.Errorf("filename:%s\nOurs:%+v\nexpected:%+v\n", e.FileName, ourGuess, e.Expected)
-			t.Fail()
+		got := GuessIt(e.FileName)
+		if got != e.Expected {
+			t.Errorf("filename: %s\ngot:      %+v\nexpected: %+v", e.FileName, got, e.Expected)
 		}
 	}
 }
 
+func TestGuessMovies(t *testing.T) {
+	testGuessFromFile(t, "testdata/movies-testdata.json")
+}
+
 func TestGuessTvShows(t *testing.T) {
-	filename := "tests/tvshows-testdata.json"
-	content, err := os.ReadFile(filename)
-	if err != nil {
-		t.Skipf("%s not available", filename)
-	}
-	var entries []Entry
-	if err := json.Unmarshal(content, &entries); err != nil {
-		t.Fatalf("invalid %s: %+v", filename, err)
-	}
-	for _, e := range entries {
-		ourGuess := GuessIt(e.FileName)
-		if ourGuess != e.Expected {
-			t.Errorf("filename:%s\nOurs:%+v\nexpected:%+v\n", e.FileName, ourGuess, e.Expected)
-			t.Fail()
-		}
-	}
+	testGuessFromFile(t, "testdata/tvshows-testdata.json")
 }

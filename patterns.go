@@ -2,6 +2,15 @@ package guessit
 
 import "regexp"
 
+// General utility patterns.
+var (
+	// Matches a double-extension pattern like "file.mkv[tag].mkv".
+	reDoubleExt = regexp.MustCompile(`(?i)\.(\w{2,4})\[([^\]]+)\]\.(\w{2,4})$`)
+
+	// Matches one or more whitespace characters.
+	reSpaces = regexp.MustCompile(`\s+`)
+)
+
 // Season/Episode patterns.
 var (
 	// SxxExx pattern: S01E02, s01e02, S003E03 (case-insensitive).
@@ -11,7 +20,7 @@ var (
 	reCrossEpisode = regexp.MustCompile(`(?i)\b(\d{1,2})x(\d{2})\b`)
 
 	// Compact episode: 3-4 digits where first 1-2 are season, last 2 are episode.
-	// e.g., 217 -> S02E17, 1316 -> S13E16, 104 -> S01E04
+	// E.g., 217 -> S02E17, 1316 -> S13E16, 104 -> S01E04.
 	reCompactEpisode = regexp.MustCompile(`(?:^|[.\s])(\d{3,4})(?:[.\s]|$)`)
 )
 
@@ -56,7 +65,7 @@ var (
 // Container / MIME type mappings.
 var containerMIME = map[string]string{
 	"mp4": "video/mp4",
-	"mkv": "",
+	"mkv": "video/x-matroska",
 }
 
 // knownMetadataTokens are tokens that indicate we've left the title area.
@@ -91,3 +100,45 @@ var knownMetadataTokens = map[string]bool{
 
 // Episode title separator: " - " after SxxExx indicates an episode title, not a release group.
 var reEpisodeTitleSep = regexp.MustCompile(`^\s*-\s+`)
+
+// compoundTokens lists hyphenated tokens that should NOT be split into
+// a release-group boundary (e.g., "WEB-DL" is a single metadata token).
+var compoundTokens = map[string]bool{
+	"web-dl":  true,
+	"web-rip": true,
+	"blu-ray": true,
+	"e-subs":  true,
+}
+
+// Cleaning / utility patterns used in the parsing pipeline.
+var (
+	// Matches a parenthesized domain-like suffix, e.g., "(site.com)".
+	reParenDomainSuffix = regexp.MustCompile(`\s*\.?\s*\([^)]*\.[^)]*\)\s*$`)
+
+	// Matches a trailing parenthesized group, e.g., "(content)".
+	reTrailingParen = regexp.MustCompile(`\s*\(([^)]+)\)\s*$`)
+
+	// Matches numeric tokens with a letter suffix, e.g., "700mb", "6ch".
+	reNumericSuffix = regexp.MustCompile(`^\d+[a-z]+$`)
+
+	// Matches a standalone screen-size number in a title, e.g., ".1080.".
+	reScreenSizeInTitle = regexp.MustCompile(`(?i)(^|[ ._-])(2160|1080|720|540|480)([ ._-]|$)`)
+
+	// Matches an unclosed trailing parenthesis, e.g., "Title (foo".
+	reUnclosedParen = regexp.MustCompile(`\s*\([^)]*$`)
+
+	// Matches a parenthesized year, e.g., "(2019)".
+	reParenYear = regexp.MustCompile(`(?i)\(\s*(?:19|20)\d{2}\s*\)`)
+
+	// Matches empty parentheses, e.g., "( )".
+	reEmptyParen = regexp.MustCompile(`\(\s*\)`)
+
+	// Matches a "Part N" suffix (roman or arabic numerals).
+	rePartSuffix = regexp.MustCompile(`(?i)\s+part\s+[0-9ivx]+$`)
+
+	// Matches bracket tags in titles, e.g., "[720p]".
+	reBracketTag = regexp.MustCompile(`(?:^|[\s._-])\[[^\]]+\]`)
+
+	// Matches a www.* website prefix.
+	reWebsitePrefix = regexp.MustCompile(`(?i)^www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+[._\-\s]+`)
+)
