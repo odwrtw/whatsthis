@@ -64,8 +64,15 @@ var (
 
 // Container / MIME type mappings.
 var containerMIME = map[string]string{
-	"mp4": "video/mp4",
-	"mkv": "video/x-matroska",
+	"mp4":  "video/mp4",
+	"mkv":  "video/x-matroska",
+	"avi":  "video/x-msvideo",
+	"webm": "video/webm",
+	"mov":  "video/quicktime",
+	"m4v":  "video/x-m4v",
+	"ts":   "video/mp2t",
+	"wmv":  "video/x-ms-wmv",
+	"flv":  "video/x-flv",
 }
 
 // knownMetadataTokens are tokens that indicate we've left the title area.
