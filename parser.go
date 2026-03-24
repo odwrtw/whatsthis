@@ -7,6 +7,17 @@ import (
 	"unicode"
 )
 
+// Separator predicates for tokenization.
+// isTokenSep splits on basic word separators (dots, spaces, underscores).
+func isTokenSep(r rune) bool {
+	return r == '.' || r == ' ' || r == '_'
+}
+
+// isMetaSep splits on all metadata-region separators including brackets and hyphens.
+func isMetaSep(r rune) bool {
+	return r == '.' || r == ' ' || r == '_' || r == '[' || r == ']' || r == '(' || r == ')' || r == '-'
+}
+
 // parse extracts metadata from a video filename.
 func parse(input string) Guess {
 	var g Guess
@@ -50,7 +61,7 @@ func parse(input string) Guess {
 		g.ScreenSize = extractScreenSize(metaRegion)
 		g.VideoCodec = extractVideoCodec(metaRegion)
 		g.AudioCodec = extractAudioCodec(metaRegion)
-		g.Title = extractTitle(titleRegion, seStart, name)
+		g.Title = extractTitle(titleRegion, seStart, seEnd, name)
 	} else {
 		prefixGroup, cleanedTitleRegion := extractMoviePrefixGroup(titleRegion)
 		titleRegion = cleanedTitleRegion
@@ -215,7 +226,7 @@ func hasMetadataTokens(s string) bool {
 // tokenize splits a string into tokens by common separators.
 func tokenize(s string) []string {
 	return strings.FieldsFunc(s, func(r rune) bool {
-		return r == '.' || r == ' ' || r == '_' || r == '(' || r == ')' || r == '+'
+		return isTokenSep(r) || r == '(' || r == ')' || r == '+'
 	})
 }
 
@@ -342,9 +353,7 @@ func extractReleaseGroup(meta, doubleExtBracket string) (group, remaining string
 // lastDotSeparatedToken returns the last token in a dot/space-separated string.
 func lastDotSeparatedToken(s string) string {
 	s = strings.TrimRight(s, ". ")
-	tokens := strings.FieldsFunc(s, func(r rune) bool {
-		return r == '.' || r == ' ' || r == '_'
-	})
+	tokens := strings.FieldsFunc(s, isTokenSep)
 	if len(tokens) == 0 {
 		return ""
 	}
@@ -371,14 +380,28 @@ func isKnownToken(tok string) bool {
 	if reVideoCodecH264.MatchString(tok) || reVideoCodecH265.MatchString(tok) {
 		return true
 	}
-	// Check tiny numeric codec fragments.
+	// Check tiny numeric codec fragments (from split channel configs like 5.1).
 	if tok == "1" || tok == "0" {
 		return true
 	}
-	if tok == "h" || tok == "x" {
-		return true
-	}
 	return false
+}
+
+// isCodecLetterInContext checks if tokens[i] is a codec letter ("h" or "x")
+// followed by a codec number ("264" or "265").
+func isCodecLetterInContext(tokens []string, i int) bool {
+	if i < 0 || i >= len(tokens) {
+		return false
+	}
+	tok := strings.ToLower(strings.TrimSpace(tokens[i]))
+	if tok != "h" && tok != "x" {
+		return false
+	}
+	if i+1 >= len(tokens) {
+		return false
+	}
+	next := strings.ToLower(strings.TrimSpace(tokens[i+1]))
+	return next == "264" || next == "265"
 }
 
 func isCodecNumberToken(tok string) bool {
@@ -461,9 +484,7 @@ func extractTrailingUnknownToken(meta string) (group, remaining string) {
 		}
 	}
 
-	tokens := strings.FieldsFunc(meta, func(r rune) bool {
-		return r == '.' || r == ' ' || r == '_'
-	})
+	tokens := strings.FieldsFunc(meta, isTokenSep)
 	if len(tokens) == 0 {
 		return "", meta
 	}
@@ -476,7 +497,7 @@ func extractTrailingUnknownToken(meta string) (group, remaining string) {
 	lastKnown := -1
 	for i, tok := range tokens {
 		lower := strings.ToLower(tok)
-		if skipTokens[lower] || isSkippableNumericToken(lower) || isKnownToken(lower) || isCodecNumberInContext(tokens, i) {
+		if skipTokens[lower] || isSkippableNumericToken(lower) || isKnownToken(lower) || isCodecNumberInContext(tokens, i) || isCodecLetterInContext(tokens, i) {
 			lastKnown = i
 		}
 	}
@@ -484,13 +505,13 @@ func extractTrailingUnknownToken(meta string) (group, remaining string) {
 	for i := len(tokens) - 1; i > lastKnown; i-- {
 		tok := tokens[i]
 		lower := strings.ToLower(tok)
-		if skipTokens[lower] || isSkippableNumericToken(lower) || isKnownToken(lower) || isCodecNumberInContext(tokens, i) {
+		if skipTokens[lower] || isSkippableNumericToken(lower) || isKnownToken(lower) || isCodecNumberInContext(tokens, i) || isCodecLetterInContext(tokens, i) {
 			continue
 		}
 		start := i
 		for j := i - 1; j > lastKnown; j-- {
 			jl := strings.ToLower(tokens[j])
-			if skipTokens[jl] || isSkippableNumericToken(jl) || isKnownToken(jl) || isCodecNumberInContext(tokens, j) {
+			if skipTokens[jl] || isSkippableNumericToken(jl) || isKnownToken(jl) || isCodecNumberInContext(tokens, j) || isCodecLetterInContext(tokens, j) {
 				break
 			}
 			start = j
@@ -573,13 +594,13 @@ func splitMovieRegions(name string) (titleRegion, metaRegion string) {
 	if years := findYearMatches(name); len(years) > 0 {
 		last := years[len(years)-1]
 		split := last.start
+		// If the year is inside parentheses (e.g., "(Label 1957)"),
+		// split at the opening paren so the label stays in meta, not title.
 		if split > 0 {
-			leftToken := strings.ToLower(strings.Trim(name[:split], " ._-()[]"))
-			leftToken = strings.ToLower(lastDotSeparatedToken(leftToken))
-			if leftToken == "harvest" {
-				split = strings.LastIndex(name[:last.start], "(")
-				if split < 0 {
-					split = last.start
+			if openParen := strings.LastIndex(name[:last.start], "("); openParen >= 0 {
+				between := name[openParen:last.start]
+				if !strings.Contains(between, ")") {
+					split = openParen
 				}
 			}
 		}
@@ -598,14 +619,20 @@ func splitMovieRegions(name string) (titleRegion, metaRegion string) {
 }
 
 func firstMetadataTokenIndex(s string) int {
+	type tokenPos struct {
+		tok   string
+		start int
+	}
+
+	var tokens []tokenPos
 	start := -1
 	for i, r := range s {
 		sep := r == '.' || r == ' ' || r == '_' || r == '-' || r == '(' || r == ')' || r == '[' || r == ']'
 		if sep {
 			if start >= 0 {
 				tok := strings.Trim(strings.ToLower(s[start:i]), "[]()")
-				if tok != "" && isKnownToken(tok) {
-					return start
+				if tok != "" {
+					tokens = append(tokens, tokenPos{tok, start})
 				}
 				start = -1
 			}
@@ -617,8 +644,20 @@ func firstMetadataTokenIndex(s string) int {
 	}
 	if start >= 0 {
 		tok := strings.Trim(strings.ToLower(s[start:]), "[]()")
-		if tok != "" && isKnownToken(tok) {
-			return start
+		if tok != "" {
+			tokens = append(tokens, tokenPos{tok, start})
+		}
+	}
+
+	// Build string slice for context-aware checks.
+	toks := make([]string, len(tokens))
+	for i, t := range tokens {
+		toks[i] = t.tok
+	}
+
+	for i, t := range tokens {
+		if isKnownToken(t.tok) || isCodecLetterInContext(toks, i) || isCodecNumberInContext(toks, i) {
+			return t.start
 		}
 	}
 	return -1
@@ -682,8 +721,12 @@ func cleanMovieTitle(raw string) string {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '!'
 	}))
 	title = strings.TrimSpace(reUnclosedParen.ReplaceAllString(title, ""))
-	if strings.HasSuffix(title, " 2 0") {
-		title = strings.TrimSpace(strings.TrimSuffix(title, " 2 0"))
+	// Strip trailing channel configs that leaked from meta (e.g., "2.0" → "2 0" after normalization).
+	for _, suffix := range []string{" 2 0", " 5 1", " 7 1"} {
+		if strings.HasSuffix(title, suffix) {
+			title = strings.TrimSpace(strings.TrimSuffix(title, suffix))
+			break
+		}
 	}
 	return title
 }
@@ -692,7 +735,7 @@ func cleanMovieTitle(raw string) string {
 // If multiple are present, prefer the last one.
 func extractScreenSize(meta string) string {
 	tokens := strings.FieldsFunc(meta, func(r rune) bool {
-		return r == '.' || r == ' ' || r == '_' || r == '[' || r == ']' || r == '(' || r == ')' || r == '-'
+		return isMetaSep(r)
 	})
 	last := ""
 	for _, tok := range tokens {
@@ -711,13 +754,6 @@ func extractVideoCodec(meta string) string {
 	if reVideoCodecH264.MatchString(meta) || reVideoCodecH264Spaced.MatchString(meta) {
 		return "H.264"
 	}
-	lower := strings.ToLower(meta)
-	if strings.Contains(lower, "h.264") || strings.Contains(lower, "x.264") {
-		return "H.264"
-	}
-	if strings.Contains(lower, "h.265") || strings.Contains(lower, "x.265") {
-		return "H.265"
-	}
 	return ""
 }
 
@@ -732,7 +768,7 @@ func extractAudioCodec(meta string) string {
 	if reAudioEAC3.MatchString(meta) {
 		return "Dolby Digital Plus"
 	}
-	if reAudioDD.MatchString(meta) && !reAudioDDP.MatchString(meta) {
+	if reAudioDD.MatchString(meta) {
 		return "Dolby Digital"
 	}
 	if reAudioAAC.MatchString(meta) {
@@ -742,19 +778,15 @@ func extractAudioCodec(meta string) string {
 }
 
 // extractTitle extracts and cleans the title from the title region.
-func extractTitle(titleRegion string, seStart int, fullName string) string {
+func extractTitle(titleRegion string, seStart, seEnd int, fullName string) string {
 	title := titleRegion
 	title = stripWebsitePrefix(title)
 
 	// If the title region is empty but we have a season/episode marker,
 	// the title might be after the marker (e.g., "s01e01 Neon Forge.mp4").
-	if strings.TrimSpace(title) == "" && seStart >= 0 {
-		_, _, _, seEnd := extractSeasonEpisode(fullName)
-		if seEnd >= 0 && seEnd < len(fullName) {
-			afterSE := fullName[seEnd:]
-			afterSE = strings.TrimLeft(afterSE, ". ")
-			title = extractTitleBeforeMetadata(afterSE)
-		}
+	if strings.TrimSpace(title) == "" && seStart >= 0 && seEnd >= 0 && seEnd < len(fullName) {
+		afterSE := strings.TrimLeft(fullName[seEnd:], ". ")
+		title = extractTitleBeforeMetadata(afterSE)
 	}
 
 	return cleanTitle(title)
@@ -762,17 +794,19 @@ func extractTitle(titleRegion string, seStart int, fullName string) string {
 
 // extractTitleBeforeMetadata gets the title portion before metadata tokens start.
 func extractTitleBeforeMetadata(s string) string {
-	tokens := strings.FieldsFunc(s, func(r rune) bool {
-		return r == '.' || r == ' ' || r == '_'
-	})
+	tokens := strings.FieldsFunc(s, isTokenSep)
+
+	lowerTokens := make([]string, len(tokens))
+	for i, t := range tokens {
+		lowerTokens[i] = strings.ToLower(t)
+	}
 
 	var titleTokens []string
-	for _, tok := range tokens {
-		lower := strings.ToLower(tok)
-		if isKnownToken(lower) {
+	for i := range tokens {
+		if isKnownToken(lowerTokens[i]) || isCodecLetterInContext(lowerTokens, i) || isCodecNumberInContext(lowerTokens, i) {
 			break
 		}
-		titleTokens = append(titleTokens, tok)
+		titleTokens = append(titleTokens, tokens[i])
 	}
 
 	return strings.Join(titleTokens, " ")
