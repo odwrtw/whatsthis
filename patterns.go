@@ -1,4 +1,4 @@
-package guessit
+package whatsthis
 
 import "regexp"
 
