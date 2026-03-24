@@ -1,4 +1,4 @@
-package guessit
+package whatsthis
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 
 type entry struct {
 	FileName string `json:"filename"`
-	Expected Guess  `json:"expected"`
+	Expected Info   `json:"expected"`
 }
 
 func testGuessFromFile(t *testing.T, filename string) {
@@ -25,7 +25,7 @@ func testGuessFromFile(t *testing.T, filename string) {
 	}
 
 	for _, e := range entries {
-		got := GuessIt(e.FileName)
+		got := Video(e.FileName)
 		if got != e.Expected {
 			t.Errorf("filename: %s\ngot:      %+v\nexpected: %+v", e.FileName, got, e.Expected)
 		}

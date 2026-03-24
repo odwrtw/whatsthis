@@ -1,4 +1,4 @@
-package guessit
+package whatsthis
 
 import (
 	"path/filepath"
@@ -19,8 +19,8 @@ func isMetaSep(r rune) bool {
 }
 
 // parse extracts metadata from a video filename.
-func parse(input string) Guess {
-	var g Guess
+func parse(input string) Info {
+	var g Info
 	g.Type = Episode
 
 	// Step 1: Extract container and handle double extensions.

@@ -1,6 +1,6 @@
-// Package guessit extracts structured metadata (title, year, quality, codec,
+// Package whatsthis extracts structured metadata (title, year, quality, codec,
 // release group, etc.) from video filenames.
-package guessit
+package whatsthis
 
 // Type represents the type of media (episode, movie, etc.).
 type Type string
@@ -12,8 +12,8 @@ const (
 	Movie Type = "movie"
 )
 
-// Guess holds the structured metadata extracted from a video filename.
-type Guess struct {
+// Info holds the structured metadata extracted from a video filename.
+type Info struct {
 	Type         Type   `json:"type"`
 	Title        string `json:"title"`
 	Episode      int    `json:"episode"`
@@ -27,7 +27,7 @@ type Guess struct {
 	MimeType     string `json:"mimetype"`
 }
 
-// GuessIt parses a video filename and returns structured metadata.
-func GuessIt(input string) Guess {
+// Video parses a video filename and returns structured metadata.
+func Video(input string) Info {
 	return parse(input)
 }
