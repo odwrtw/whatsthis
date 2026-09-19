@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Parse video filenames locally with whatsthis.Video.">
+  <meta name="color-scheme" content="light dark">
+  <title>whatsthis.Video</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./wasm_exec.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>whatsthis<span>.Video</span></header>
+
+    <form id="parse-form">
+      <label for="filename" class="visually-hidden">Video filename</label>
+      <div class="input-wrap">
+        <input
+          id="filename"
+          name="filename"
+          type="text"
+          placeholder="Video filename"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          enterkeyhint="go"
+          required
+          disabled
+        >
+        <kbd aria-hidden="true">↵</kbd>
+      </div>
+    </form>
+
+    <p id="status" role="status" aria-live="polite">Loading…</p>
+
+    <section id="result" aria-live="polite" hidden>
+      <h1 data-field="title"></h1>
+      <dl>
+        <div><dt>Type</dt><dd data-field="type"></dd></div>
+        <div><dt>Year</dt><dd data-field="year"></dd></div>
+        <div><dt>Season</dt><dd data-field="season"></dd></div>
+        <div><dt>Episode</dt><dd data-field="episode"></dd></div>
+        <div><dt>Resolution</dt><dd data-field="screen_size"></dd></div>
+        <div><dt>Video</dt><dd data-field="video_codec"></dd></div>
+        <div><dt>Audio</dt><dd data-field="audio_codec"></dd></div>
+        <div><dt>Group</dt><dd data-field="release_group"></dd></div>
+        <div><dt>Container</dt><dd data-field="container"></dd></div>
+        <div><dt>MIME</dt><dd data-field="mimetype"></dd></div>
+      </dl>
+    </section>
+  </main>
+</body>
+</html>
