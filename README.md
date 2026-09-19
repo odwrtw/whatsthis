@@ -22,3 +22,19 @@ fmt.Println(info.VideoCodec)   // H.264
 fmt.Println(info.ReleaseGroup) // YIFY
 fmt.Println(info.Container)    // mkv
 ```
+
+## WebAssembly demo
+
+The static web interface runs the parser entirely in the browser; filenames are not uploaded anywhere.
+
+Try it at [odwrtw.github.io/whatsthis](https://odwrtw.github.io/whatsthis/).
+
+Build it with the repository's Go version:
+
+```sh
+./scripts/build-web.sh
+```
+
+Then serve `dist` with any static HTTP server and open `index.html`. The generated directory contains the site assets, the WebAssembly binary, and the matching `wasm_exec.js` from the local Go toolchain.
+
+Pushes to `master` deploy the site through GitHub Actions. To enable deployment, select **GitHub Actions** as the source under **Settings → Pages** in the repository.
