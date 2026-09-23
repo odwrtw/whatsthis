@@ -2,6 +2,7 @@ package whatsthis
 
 import (
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -80,6 +81,141 @@ func parse(input string) Info {
 	}
 
 	return g
+}
+
+// parseSeasonName parses an extensionless whole-season release name.
+func parseSeasonName(name string) (Info, bool) {
+	season, markerStart, markerEnd, ok := extractSeasonName(name)
+	if !ok {
+		return Info{}, false
+	}
+
+	g := Info{
+		Type:   ShowSeason,
+		Season: season,
+	}
+
+	titleRegion := reComplete.ReplaceAllString(name[:markerStart], " ")
+	metaRegion := name[markerEnd:]
+	metaRegion = reSeasonDescriptorBracket.ReplaceAllString(metaRegion, " ")
+	metaRegion = stripSeasonNameMarkers(metaRegion)
+	metaRegion = reComplete.ReplaceAllString(metaRegion, " ")
+	metaRegion = reFileSizeBracket.ReplaceAllString(metaRegion, " ")
+	metaRegion = reContainerBracket.ReplaceAllString(metaRegion, " ")
+
+	explicitGroup, metaRegion := normalizeSeasonMeta(metaRegion)
+
+	g.Year, titleRegion = extractYear(titleRegion)
+	if g.Year == 0 {
+		g.Year, metaRegion = extractYear(metaRegion)
+	}
+
+	if explicitGroup != "" {
+		g.ReleaseGroup = explicitGroup
+	} else {
+		g.ReleaseGroup, metaRegion = extractSeasonReleaseGroup(metaRegion)
+	}
+	g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
+	g.ScreenSize = extractScreenSize(metaRegion)
+	g.VideoCodec = extractVideoCodec(metaRegion)
+	g.AudioCodec = extractAudioCodec(metaRegion)
+	g.Title = extractTitle(titleRegion, markerStart, markerEnd, name)
+
+	return g, true
+}
+
+type seasonNameMarker struct {
+	season int
+	start  int
+	end    int
+}
+
+// extractSeasonName finds markers that identify a whole-season release. When
+// multiple markers are present, they must all name the same season.
+func extractSeasonName(name string) (season, start, end int, ok bool) {
+	var markers []seasonNameMarker
+
+	for _, m := range reSeasonEpisodeRange.FindAllStringSubmatchIndex(name, -1) {
+		seasonNumber, _ := strconv.Atoi(name[m[2]:m[3]])
+		firstEpisode, _ := strconv.Atoi(name[m[4]:m[5]])
+		lastEpisode, _ := strconv.Atoi(name[m[6]:m[7]])
+		if firstEpisode == 1 && lastEpisode > firstEpisode {
+			markers = append(markers, seasonNameMarker{seasonNumber, m[0], m[1]})
+		}
+	}
+
+	for _, re := range []*regexp.Regexp{reSeasonOnly, reSeasonWordOnly} {
+		for _, m := range re.FindAllStringSubmatchIndex(name, -1) {
+			seasonNumber, _ := strconv.Atoi(name[m[2]:m[3]])
+			markers = append(markers, seasonNameMarker{seasonNumber, m[0], m[1]})
+		}
+	}
+
+	if len(markers) == 0 {
+		return 0, 0, 0, false
+	}
+
+	first := markers[0]
+	for _, marker := range markers[1:] {
+		if marker.season != first.season {
+			return 0, 0, 0, false
+		}
+		if marker.start < first.start {
+			first = marker
+		}
+	}
+
+	return first.season, first.start, first.end, true
+}
+
+func stripSeasonNameMarkers(meta string) string {
+	meta = reSeasonEpisodeRange.ReplaceAllString(meta, " ")
+	meta = reSeasonOnly.ReplaceAllString(meta, " ")
+	return reSeasonWordOnly.ReplaceAllString(meta, " ")
+}
+
+// normalizeSeasonMeta removes punctuation around a season marker. A leading
+// hyphen with no metadata after it denotes an explicit release group.
+func normalizeSeasonMeta(meta string) (explicitGroup, remaining string) {
+	trimmed := strings.TrimSpace(meta)
+	if strings.HasPrefix(trimmed, "-") {
+		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
+		if !hasMetadataTokens(strings.NewReplacer("[", " ", "]", " ").Replace(trimmed)) &&
+			!isSeasonMetadataBracket(strings.Trim(trimmed, "[]")) {
+			return cleanReleaseGroup(trimmed), ""
+		}
+	}
+
+	if strings.HasPrefix(trimmed, "(") && strings.HasSuffix(trimmed, ")") {
+		trimmed = strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+	}
+
+	return "", trimmed
+}
+
+// isSeasonMetadataBracket reports whether bracket content contains metadata
+// that should remain available to the screen-size and codec extractors.
+func isSeasonMetadataBracket(content string) bool {
+	return hasMetadataTokens(content) || extractAudioCodec(content) != ""
+}
+
+// extractSeasonReleaseGroup treats a final bracket as the release group unless
+// it contains known metadata (e.g., [1080p] or [x265]).
+func extractSeasonReleaseGroup(meta string) (group, remaining string) {
+	trimmed := strings.TrimSpace(meta)
+	if strings.HasSuffix(trimmed, "]") {
+		if start := strings.LastIndex(trimmed, "["); start >= 0 {
+			group = strings.TrimSpace(trimmed[start+1 : len(trimmed)-1])
+			if isSeasonMetadataBracket(group) {
+				priorGroup, before := extractSeasonReleaseGroup(trimmed[:start])
+				return priorGroup, strings.TrimSpace(before + " " + trimmed[start:])
+			}
+			if group != "" {
+				return group, strings.TrimSpace(trimmed[:start])
+			}
+		}
+	}
+	return extractReleaseGroup(meta, "")
 }
 
 // extractContainer extracts the file extension/container from the filename.

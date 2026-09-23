@@ -23,9 +23,19 @@ fmt.Println(info.ReleaseGroup) // YIFY
 fmt.Println(info.Container)    // mkv
 ```
 
+Use `File` as the general entry point for extensionless release names and video files. It recognizes whole-season names before falling back to `Video`:
+
+```go
+info := whatsthis.File("Velvet Meridian 2026 Season 1 Complete 1080p WEB x264 [theta_group]")
+fmt.Println(info.Type)    // show_season
+fmt.Println(info.Title)   // Velvet Meridian
+fmt.Println(info.Season)  // 1
+fmt.Println(info.Episode) // 0
+```
+
 ## WebAssembly demo
 
-The static web interface runs the parser entirely in the browser; filenames are not uploaded anywhere.
+The static web interface runs `whatsthis.File` entirely in the browser; names are not uploaded anywhere.
 
 Try it at [odwrtw.github.io/whatsthis](https://odwrtw.github.io/whatsthis/).
 

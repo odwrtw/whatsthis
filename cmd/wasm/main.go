@@ -9,7 +9,23 @@ import (
 	"github.com/odwrtw/whatsthis"
 )
 
-var videoFunc js.Func
+var (
+	fileFunc  js.Func
+	videoFunc js.Func
+)
+
+func file(_ js.Value, args []js.Value) any {
+	if len(args) != 1 || args[0].Type() != js.TypeString {
+		return ""
+	}
+
+	result, err := json.Marshal(whatsthis.File(args[0].String()))
+	if err != nil {
+		return ""
+	}
+
+	return string(result)
+}
 
 func video(_ js.Value, args []js.Value) any {
 	if len(args) != 1 || args[0].Type() != js.TypeString {
@@ -25,9 +41,11 @@ func video(_ js.Value, args []js.Value) any {
 }
 
 func main() {
+	fileFunc = js.FuncOf(file)
 	videoFunc = js.FuncOf(video)
 
 	api := js.Global().Get("Object").New()
+	api.Set("file", fileFunc)
 	api.Set("video", videoFunc)
 	js.Global().Set("whatsthis", api)
 

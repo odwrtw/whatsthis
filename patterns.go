@@ -13,6 +13,13 @@ var (
 
 // Season/Episode patterns.
 var (
+	// SxxEyy-zz pattern: S01E01-08 or S01E01-E08 (case-insensitive).
+	reSeasonEpisodeRange = regexp.MustCompile(`(?i)\bS(\d{1,3})[\s.]?E(\d{1,3})\s*-\s*E?(\d{1,3})\b`)
+
+	// Standalone season patterns: S01 and Season 1.
+	reSeasonOnly     = regexp.MustCompile(`(?i)\bS(\d{1,3})\b`)
+	reSeasonWordOnly = regexp.MustCompile(`(?i)\bSeason[\s._-]*(\d{1,3})\b`)
+
 	// SxxExx pattern: S01E02, s01e02, S003E03 (case-insensitive).
 	reSeasonEpisode = regexp.MustCompile(`(?i)\bS(\d{1,3})[\s.]?E(\d{1,3})\b`)
 
@@ -139,6 +146,14 @@ var (
 
 	// Matches empty parentheses, e.g., "( )".
 	reEmptyParen = regexp.MustCompile(`\(\s*\)`)
+
+	// Matches optional whole-season annotations.
+	reComplete = regexp.MustCompile(`(?i)\[?\bCOMPLETE\b\]?`)
+
+	// Matches bracketed whole-season descriptors and non-group file tags.
+	reSeasonDescriptorBracket = regexp.MustCompile(`(?i)\[\s*(?:S\d{1,3}|Season[\s._-]*\d{1,3})\b[^\]]*\]`)
+	reFileSizeBracket         = regexp.MustCompile(`(?i)\[\s*\d+(?:\.\d+)?\s*(?:KB|MB|GB|TB)\s*\]`)
+	reContainerBracket        = regexp.MustCompile(`(?i)\[\s*(?:MP4|MKV|AVI|WEBM|MOV|M4V|TS|WMV|FLV)\s*\]`)
 
 	// Matches a "Part N" suffix (roman or arabic numerals).
 	rePartSuffix = regexp.MustCompile(`(?i)\s+part\s+[0-9ivx]+$`)
