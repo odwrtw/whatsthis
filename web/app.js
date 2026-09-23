@@ -52,7 +52,7 @@ form.addEventListener("submit", (event) => {
   }
 
   try {
-    const encoded = globalThis.whatsthis.video(filename);
+    const encoded = globalThis.whatsthis.file(filename);
     if (!encoded) {
       throw new Error("the parser returned no result");
     }
@@ -85,7 +85,7 @@ form.addEventListener("submit", (event) => {
       setUnavailable("WebAssembly stopped unexpectedly.");
     });
 
-    if (typeof globalThis.whatsthis?.video !== "function") {
+    if (typeof globalThis.whatsthis?.file !== "function") {
       throw new Error("the parser API was not registered");
     }
 

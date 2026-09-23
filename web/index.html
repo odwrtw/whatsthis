@@ -3,25 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Parse video filenames locally with whatsthis.Video.">
+  <meta name="description" content="Parse file and release names locally with whatsthis.File.">
   <meta name="color-scheme" content="light dark">
-  <title>whatsthis.Video</title>
+  <title>whatsthis.File</title>
   <link rel="stylesheet" href="./style.css">
   <script src="./wasm_exec.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
   <main>
-    <header>whatsthis<span>.Video</span></header>
+    <header>whatsthis<span>.File</span></header>
 
     <form id="parse-form">
-      <label for="filename" class="visually-hidden">Video filename</label>
+      <label for="filename" class="visually-hidden">File or release name</label>
       <div class="input-wrap">
         <input
           id="filename"
           name="filename"
           type="text"
-          placeholder="Video filename"
+          placeholder="File or release name"
           autocomplete="off"
           autocapitalize="off"
           spellcheck="false"
