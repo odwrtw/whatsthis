@@ -15,27 +15,31 @@ const (
 	Episode Type = "episode"
 	// ShowSeason indicates a complete TV show season.
 	ShowSeason Type = "show_season"
+	// Show indicates a multi-season TV show collection.
+	Show Type = "show"
 	// Movie indicates a movie.
 	Movie Type = "movie"
 )
 
 // Info holds structured metadata extracted from a filename or release name.
 type Info struct {
-	Type         Type   `json:"type"`
-	Title        string `json:"title"`
-	Episode      int    `json:"episode"`
-	Season       int    `json:"season"`
-	Year         int    `json:"year"`
-	ScreenSize   string `json:"screen_size"`
-	ReleaseGroup string `json:"release_group"`
-	AudioCodec   string `json:"audio_codec"`
-	VideoCodec   string `json:"video_codec"`
-	Container    string `json:"container"`
-	MimeType     string `json:"mimetype"`
+	Type         Type     `json:"type"`
+	Title        string   `json:"title"`
+	Episode      int      `json:"episode"`
+	Season       int      `json:"season"`
+	Year         int      `json:"year"`
+	ScreenSize   string   `json:"screen_size"`
+	ReleaseGroup string   `json:"release_group"`
+	AudioCodec   string   `json:"audio_codec"`
+	VideoCodec   string   `json:"video_codec"`
+	Languages    []string `json:"languages"`
+	Multilingual bool     `json:"multilingual"`
+	Container    string   `json:"container"`
+	MimeType     string   `json:"mimetype"`
 }
 
 // File parses a file or extensionless release name and returns structured
-// metadata. Whole-season names are recognized before falling back to Video.
+// metadata. Whole-season and multi-season names are recognized before falling back to Video.
 func File(input string) Info {
 	if hasFileExtension(input) {
 		return Video(input)
@@ -55,7 +59,22 @@ func hasFileExtension(input string) bool {
 		strings.ContainsAny(ext, "-[]_ ()") {
 		return false
 	}
+	if hasWebsiteDomainSuffix(input) {
+		return false
+	}
 	return true
+}
+
+func hasWebsiteDomainSuffix(input string) bool {
+	lastDot := strings.LastIndex(input, ".")
+	if lastDot <= 0 {
+		return false
+	}
+	domainStart := strings.LastIndex(input[:lastDot], ".")
+	if domainStart < 0 {
+		return false
+	}
+	return isLikelyDomainTag(input[domainStart+1:])
 }
 
 // Video parses a video filename and returns structured metadata.

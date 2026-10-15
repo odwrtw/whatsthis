@@ -47,8 +47,10 @@ func parse(input string) Info {
 
 	// Step 4: Extract type-specific fields.
 	if g.Type == Episode {
+		titleRegion = reEpisodeSourceSuffix.ReplaceAllString(titleRegion, "")
 		// Handle " - Episode Title" and pure episode title patterns.
 		metaRegion = stripEpisodeTitle(metaRegion)
+		g.Languages, g.Multilingual = extractLanguages(metaRegion)
 
 		g.ReleaseGroup, metaRegion = extractReleaseGroup(metaRegion, doubleExtBracket)
 		g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
@@ -68,6 +70,7 @@ func parse(input string) Info {
 		titleRegion = cleanedTitleRegion
 
 		g.Year, metaRegion = extractYear(metaRegion)
+		g.Languages, g.Multilingual = extractLanguages(metaRegion)
 		g.ReleaseGroup, metaRegion = extractReleaseGroup(metaRegion, doubleExtBracket)
 		g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
 		if prefixGroup != "" {
@@ -86,12 +89,19 @@ func parse(input string) Info {
 // parseSeasonName parses an extensionless whole-season release name.
 func parseSeasonName(name string) (Info, bool) {
 	season, markerStart, markerEnd, ok := extractSeasonName(name)
+	typ := ShowSeason
+	if seriesStart, seriesEnd, isSeries := extractSeriesName(name); isSeries {
+		season = 0
+		markerStart, markerEnd = seriesStart, seriesEnd
+		typ = Show
+		ok = true
+	}
 	if !ok {
 		return Info{}, false
 	}
 
 	g := Info{
-		Type:   ShowSeason,
+		Type:   typ,
 		Season: season,
 	}
 
@@ -109,6 +119,7 @@ func parseSeasonName(name string) (Info, bool) {
 	if g.Year == 0 {
 		g.Year, metaRegion = extractYear(metaRegion)
 	}
+	g.Languages, g.Multilingual = extractLanguages(metaRegion)
 
 	if explicitGroup != "" {
 		g.ReleaseGroup = explicitGroup
@@ -128,6 +139,23 @@ type seasonNameMarker struct {
 	season int
 	start  int
 	end    int
+}
+
+// extractSeriesName finds an explicit range spanning multiple seasons.
+func extractSeriesName(name string) (start, end int, ok bool) {
+	firstStart := len(name)
+	for _, re := range []*regexp.Regexp{reSeasonRange, reSeasonWordRange} {
+		for _, match := range re.FindAllStringSubmatchIndex(name, -1) {
+			firstSeason, _ := strconv.Atoi(name[match[2]:match[3]])
+			lastSeason, _ := strconv.Atoi(name[match[4]:match[5]])
+			if firstSeason != lastSeason && match[0] < firstStart {
+				start, end = match[0], match[1]
+				firstStart = match[0]
+				ok = true
+			}
+		}
+	}
+	return start, end, ok
 }
 
 // extractSeasonName finds markers that identify a whole-season release. When
@@ -170,6 +198,8 @@ func extractSeasonName(name string) (season, start, end int, ok bool) {
 
 func stripSeasonNameMarkers(meta string) string {
 	meta = reSeasonEpisodeRange.ReplaceAllString(meta, " ")
+	meta = reSeasonRange.ReplaceAllString(meta, " ")
+	meta = reSeasonWordRange.ReplaceAllString(meta, " ")
 	meta = reSeasonOnly.ReplaceAllString(meta, " ")
 	return reSeasonWordOnly.ReplaceAllString(meta, " ")
 }
@@ -257,7 +287,9 @@ func extractSeasonEpisode(name string) (season, episode, start, end int) {
 	if m := reSeasonEpisode.FindStringSubmatchIndex(name); m != nil {
 		s, _ := strconv.Atoi(name[m[2]:m[3]])
 		e, _ := strconv.Atoi(name[m[4]:m[5]])
-		return s, e, m[0], m[1]
+		// The marker starts one byte before the season digits, at S,
+		// excluding the boundary character consumed by the regexp.
+		return s, e, m[2] - 1, m[5]
 	}
 
 	// Try NxNN pattern (e.g., 9x18, 11x03).
@@ -355,6 +387,12 @@ func hasMetadataTokens(s string) bool {
 		if knownMetadataTokens[tok] {
 			return true
 		}
+		if _, ok := releaseLanguageNames[tok]; ok || reScreenSize.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
+			return true
+		}
+		if _, ok := screenSizeDimensions[tok]; ok {
+			return true
+		}
 	}
 	return false
 }
@@ -389,6 +427,20 @@ func extractReleaseGroup(meta, doubleExtBracket string) (group, remaining string
 			bracketContent := strings.TrimSpace(meta[idx+1 : idx+endIdx])
 			hadDotBeforeBracket := idx > 0 && meta[idx-1] == '.'
 			beforeBracket := strings.TrimRight(meta[:idx], ". ")
+
+			if groupSep := strings.LastIndex(bracketContent, "-"); groupSep > 0 {
+				bracketMeta := strings.TrimSpace(bracketContent[:groupSep])
+				bracketGroup := strings.TrimSpace(bracketContent[groupSep+1:])
+				if bracketMeta != "" && bracketGroup != "" && hasMetadataTokens(bracketMeta) && !hasMetadataTokens(bracketGroup) {
+					remaining := strings.TrimSpace(beforeBracket + " " + bracketMeta)
+					return cleanReleaseGroup(bracketGroup), remaining
+				}
+			}
+			if hasMetadataTokens(bracketContent) {
+				priorGroup, before := extractReleaseGroup(beforeBracket, "")
+				return priorGroup, strings.TrimSpace(before + " " + meta[idx:])
+			}
+
 			if strings.HasSuffix(beforeBracket, "-") {
 				return strings.Trim(bracketContent, "[]"), strings.TrimRight(strings.TrimSuffix(beforeBracket, "-"), ". ")
 			}
@@ -496,8 +548,30 @@ func lastDotSeparatedToken(s string) string {
 	return tokens[len(tokens)-1]
 }
 
+// extractLanguages identifies generic multilingual markers and explicit
+// language tags from the metadata region.
+func extractLanguages(meta string) ([]string, bool) {
+	var languages []string
+	seen := make(map[string]bool)
+	multilingual := false
+
+	for _, token := range strings.FieldsFunc(meta, isMetaSep) {
+		lower := strings.ToLower(token)
+		if lower == "multi" {
+			multilingual = true
+			continue
+		}
+		if language, ok := releaseLanguageNames[lower]; ok && !seen[language] {
+			languages = append(languages, language)
+			seen[language] = true
+		}
+	}
+
+	return languages, multilingual || len(languages) > 1
+}
+
 // isKnownToken checks if a lowercase token is a known metadata keyword,
-// screen size, or codec.
+// screen size, codec, or language.
 func isKnownToken(tok string) bool {
 	tok = strings.ToLower(strings.Trim(tok, "[]-_. "))
 	if tok == "" {
@@ -506,11 +580,29 @@ func isKnownToken(tok string) bool {
 	if knownMetadataTokens[tok] {
 		return true
 	}
+	if _, ok := releaseLanguageNames[tok]; ok {
+		return true
+	}
+	if _, ok := screenSizeDimensions[tok]; ok {
+		return true
+	}
+	if parts := strings.Split(tok, "-"); len(parts) > 1 {
+		allLanguages := true
+		for _, part := range parts {
+			if _, ok := releaseLanguageNames[part]; !ok {
+				allLanguages = false
+				break
+			}
+		}
+		if allLanguages {
+			return true
+		}
+	}
 	compact := strings.ReplaceAll(tok, "-", "")
 	if compact != tok && knownMetadataTokens[compact] {
 		return true
 	}
-	if reScreenSize.MatchString(tok) {
+	if reScreenSize.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
 		return true
 	}
 	if reVideoCodecH264.MatchString(tok) || reVideoCodecH265.MatchString(tok) {
@@ -689,7 +781,7 @@ func isLikelyDomainTag(s string) bool {
 	}
 	tld := parts[len(parts)-1]
 	switch tld {
-	case "com", "net", "org", "to", "re", "ws", "cc", "info", "biz", "io", "tv", "me", "co":
+	case "com", "net", "org", "to", "re", "ws", "cc", "info", "biz", "io", "tv", "me", "co", "pl":
 		return true
 	default:
 		return false
@@ -875,7 +967,14 @@ func extractScreenSize(meta string) string {
 	})
 	last := ""
 	for _, tok := range tokens {
-		if m := reScreenSizeToken.FindStringSubmatch(strings.ToLower(strings.TrimSpace(tok))); m != nil {
+		tok = strings.ToLower(strings.TrimSpace(tok))
+		if size, ok := screenSizeDimensions[tok]; ok {
+			last = size
+		} else if tok == "4k" {
+			last = "2160p"
+		} else if m := reScreenSizeToken.FindStringSubmatch(tok); m != nil {
+			last = m[1] + "p"
+		} else if m := reScreenSizeNumberToken.FindStringSubmatch(tok); m != nil {
 			last = m[1] + "p"
 		}
 	}
@@ -890,13 +989,31 @@ func extractVideoCodec(meta string) string {
 	if reVideoCodecH264.MatchString(meta) || reVideoCodecH264Spaced.MatchString(meta) {
 		return "H.264"
 	}
+	if reVideoCodecAV1.MatchString(meta) {
+		return "AV1"
+	}
+	if reVideoCodecVP9.MatchString(meta) {
+		return "VP9"
+	}
+	if reVideoCodecVC1.MatchString(meta) {
+		return "VC-1"
+	}
 	return ""
 }
 
 // extractAudioCodec extracts the audio codec from the metadata region.
 func extractAudioCodec(meta string) string {
+	if reAudioTrueHD.MatchString(meta) {
+		return "Dolby TrueHD"
+	}
 	if reAudioDTS.MatchString(meta) {
 		return "DTS"
+	}
+	if reAudioFLAC.MatchString(meta) {
+		return "FLAC"
+	}
+	if reAudioOPUS.MatchString(meta) {
+		return "Opus"
 	}
 	if reAudioDDP.MatchString(meta) {
 		return "Dolby Digital Plus"

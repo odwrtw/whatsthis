@@ -17,11 +17,13 @@ var (
 	reSeasonEpisodeRange = regexp.MustCompile(`(?i)\bS(\d{1,3})[\s.]?E(\d{1,3})\s*-\s*E?(\d{1,3})\b`)
 
 	// Standalone season patterns: S01 and Season 1.
-	reSeasonOnly     = regexp.MustCompile(`(?i)\bS(\d{1,3})\b`)
-	reSeasonWordOnly = regexp.MustCompile(`(?i)\bSeason[\s._-]*(\d{1,3})\b`)
+	reSeasonOnly      = regexp.MustCompile(`(?i)\bS(\d{1,3})\b`)
+	reSeasonWordOnly  = regexp.MustCompile(`(?i)\bSeason[\s._-]*(\d{1,3})\b`)
+	reSeasonRange     = regexp.MustCompile(`(?i)\bS(\d{1,3})\s*-\s*S?(\d{1,3})\b`)
+	reSeasonWordRange = regexp.MustCompile(`(?i)\bSeason[\s._-]*(\d{1,3})\s*-\s*(?:Season[\s._-]*)?(\d{1,3})\b`)
 
 	// SxxExx pattern: S01E02, s01e02, S003E03 (case-insensitive).
-	reSeasonEpisode = regexp.MustCompile(`(?i)\bS(\d{1,3})[\s.]?E(\d{1,3})\b`)
+	reSeasonEpisode = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])S(\d{1,3})[\s.]?E(\d{1,3})(?:$|[^A-Za-z0-9])`)
 
 	// NxNN pattern: 1x02, 10x20.
 	reCrossEpisode = regexp.MustCompile(`(?i)\b(\d{1,2})x(\d{2})\b`)
@@ -36,15 +38,26 @@ var (
 var reYear = regexp.MustCompile(`(?:^|[.\s_(\[\]])(((?:19|20)\d{2}))(?:[.\s_)\]]|$)`)
 
 // Screen size patterns.
-var reScreenSize = regexp.MustCompile(`(?i)(?:^|[.\s_\[(])(2160|1080|720|540|480)p(?:$|[.\s_\])])`)
+var reScreenSize = regexp.MustCompile(`(?i)(?:^|[.\s_\[(])(?:HD)?(2160|1440|1080|720|540|480)p(?:$|[.\s_\])])`)
 
-// Screen size token pattern.
-var reScreenSizeToken = regexp.MustCompile(`(?i)^(2160|1080|720|540|480)p$`)
+// Known pixel dimensions normalized to the screen-size notation used by Info.
+var screenSizeDimensions = map[string]string{
+	"1920x1080": "1080p",
+}
+
+// Screen size token patterns, with optional HD and progressive-scan markers.
+var (
+	reScreenSizeToken       = regexp.MustCompile(`(?i)^(?:HD)?(2160|1440|1080|720|540|480)p$`)
+	reScreenSizeNumberToken = regexp.MustCompile(`(?i)^(2160|1080|720|540|480)$`)
+)
 
 // Video codec patterns.
 var (
-	reVideoCodecH264 = regexp.MustCompile(`(?i)\b(?:x\.?264|h\.?264)\b`)
-	reVideoCodecH265 = regexp.MustCompile(`(?i)\b(?:x\.?265|h\.?265|hevc)\b`)
+	reVideoCodecH264 = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])(?:x\.?264|h\.?264|avc)(?:$|[^A-Za-z0-9])`)
+	reVideoCodecH265 = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])(?:x\.?265|h\.?265|hevc)(?:$|[^A-Za-z0-9])`)
+	reVideoCodecAV1  = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])av1(?:$|[^A-Za-z0-9])`)
+	reVideoCodecVP9  = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])vp9(?:$|[^A-Za-z0-9])`)
+	reVideoCodecVC1  = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])vc-?1(?:$|[^A-Za-z0-9])`)
 
 	// Spaced video codec: "H 264", "H 265", "X 264", "X 265" (space-separated).
 	reVideoCodecH264Spaced = regexp.MustCompile(`(?i)\b[HX]\s+264\b`)
@@ -65,8 +78,11 @@ var (
 	// AAC with optional channel config.
 	reAudioAAC = regexp.MustCompile(`(?i)\bAAC(?:[\s.]?\d[\s.]?\d)?\b`)
 
-	// DTS audio codec.
-	reAudioDTS = regexp.MustCompile(`(?i)\bDTS(?:[\s.-]?(?:HD|MA|ES))?\b`)
+	// DTS, FLAC, Opus, and Dolby TrueHD audio codecs.
+	reAudioDTS    = regexp.MustCompile(`(?i)\bDTS(?:[\s.-]?(?:HD|MA|ES))?\b`)
+	reAudioFLAC   = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])FLAC(?:$|[^A-Za-z0-9])`)
+	reAudioOPUS   = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])OPUS(?:$|[^A-Za-z0-9])`)
+	reAudioTrueHD = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])TRUEHD(?:$|[^A-Za-z0-9])`)
 )
 
 // Container / MIME type mappings.
@@ -86,18 +102,18 @@ var containerMIME = map[string]string{
 // Matched case-insensitively against individual tokens.
 var knownMetadataTokens = map[string]bool{
 	// Screen sizes.
-	"2160p": true, "1080p": true, "720p": true, "540p": true, "480p": true,
+	"4k": true, "2160p": true, "1440p": true, "1080p": true, "720p": true, "540p": true, "480p": true,
 	// Video codecs.
-	"x264": true, "x265": true, "h264": true, "h265": true, "hevc": true,
+	"x264": true, "x265": true, "h264": true, "h265": true, "hevc": true, "avc": true, "av1": true, "vp9": true, "vc-1": true,
 	"h.264": true, "h.265": true, "x.264": true, "x.265": true,
 	// Audio codecs.
-	"aac": true, "ac3": true, "eac3": true,
+	"aac": true, "ac3": true, "eac3": true, "flac": true, "truehd": true, "opus": true,
 	"aac2.0": true, "aac5.1": true,
 	// Dolby.
 	"dd5.1": true, "dd2.0": true, "ddp5.1": true, "ddp2.0": true,
 	"dd+5.1": true, "dd+2.0": true,
 	// Source / format keywords.
-	"hdtv": true, "pdtv": true, "webrip": true, "web-dl": true, "webdl": true,
+	"hdtv": true, "pdtv": true, "webrip": true, "web-dl": true, "web-dlrip": true, "webdl": true,
 	"web": true, "web-rip": true,
 	"brrip": true, "bdrip": true, "bluray": true, "blu-ray": true, "dvdrip": true, "hdrip": true,
 	"e-subs": true, "esubs": true,
@@ -109,7 +125,24 @@ var knownMetadataTokens = map[string]bool{
 	"dd5": true, "dd2": true, "ddp5": true, "ddp2": true, "dd+5": true, "dd+2": true,
 	"hd":     true,
 	"dvdscr": true, "camrip": true, "hdts": true, "hdcam": true,
-	"new": true, "dual": true, "vof": true,
+	"new": true, "dual": true, "vof": true, "multi": true,
+}
+
+// Common three-letter language tags used in release names, normalized to English names.
+var releaseLanguageNames = map[string]string{
+	"eng": "English", "ita": "Italian", "rus": "Russian", "ukr": "Ukrainian",
+	"ger": "German", "deu": "German", "fre": "French", "fra": "French",
+	"spa": "Spanish", "por": "Portuguese", "pol": "Polish",
+	"jpn": "Japanese", "jap": "Japanese", "kor": "Korean",
+	"chi": "Chinese", "zho": "Chinese", "chs": "Chinese (Simplified)", "cht": "Chinese (Traditional)",
+	"hin": "Hindi", "tur": "Turkish", "dut": "Dutch", "nld": "Dutch",
+	"swe": "Swedish", "dan": "Danish", "fin": "Finnish",
+	"cze": "Czech", "ces": "Czech", "slo": "Slovak", "slk": "Slovak",
+	"hun": "Hungarian", "gre": "Greek", "ell": "Greek", "heb": "Hebrew",
+	"ara": "Arabic", "tha": "Thai", "vie": "Vietnamese", "ind": "Indonesian",
+	"rum": "Romanian", "ron": "Romanian", "bul": "Bulgarian", "hrv": "Croatian",
+	"srp": "Serbian", "slv": "Slovenian", "est": "Estonian", "lav": "Latvian",
+	"lit": "Lithuanian", "isl": "Icelandic",
 }
 
 // Episode title separator: " - " after SxxExx indicates an episode title, not a release group.
@@ -118,10 +151,11 @@ var reEpisodeTitleSep = regexp.MustCompile(`^\s*-\s+`)
 // compoundTokens lists hyphenated tokens that should NOT be split into
 // a release-group boundary (e.g., "WEB-DL" is a single metadata token).
 var compoundTokens = map[string]bool{
-	"web-dl":  true,
-	"web-rip": true,
-	"blu-ray": true,
-	"e-subs":  true,
+	"web-dl":    true,
+	"web-dlrip": true,
+	"web-rip":   true,
+	"blu-ray":   true,
+	"e-subs":    true,
 }
 
 // Cleaning / utility patterns used in the parsing pipeline.
@@ -136,13 +170,16 @@ var (
 	reNumericSuffix = regexp.MustCompile(`^\d+[a-z]+$`)
 
 	// Matches a standalone screen-size number in a title, e.g., ".1080.".
-	reScreenSizeInTitle = regexp.MustCompile(`(?i)(^|[ ._-])(2160|1080|720|540|480)([ ._-]|$)`)
+	reScreenSizeInTitle = regexp.MustCompile(`(?i)(^|[ ._-])(4k|2160|1440|1080|720|540|480)([ ._-]|$)`)
 
 	// Matches an unclosed trailing parenthesis, e.g., "Title (foo".
 	reUnclosedParen = regexp.MustCompile(`\s*\([^)]*$`)
 
 	// Matches a parenthesized year, e.g., "(2019)".
 	reParenYear = regexp.MustCompile(`(?i)\(\s*(?:19|20)\d{2}\s*\)`)
+
+	// Matches source tags that sometimes precede an episode marker.
+	reEpisodeSourceSuffix = regexp.MustCompile(`(?i)[._\s-]+(?:dvdrip|bdrip|brrip|webrip|web-dl|web-dlrip|hdtv|pdtv|hdrip|blu-ray|bluray)[._\s-]*$`)
 
 	// Matches empty parentheses, e.g., "( )".
 	reEmptyParen = regexp.MustCompile(`\(\s*\)`)

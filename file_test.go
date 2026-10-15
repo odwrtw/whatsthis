@@ -1,6 +1,9 @@
 package whatsthis
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestFileWholeSeasons(t *testing.T) {
 	tests := []struct {
@@ -109,10 +112,70 @@ func TestFileWholeSeasons(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := File(test.name); got != test.expected {
+			if got := File(test.name); !reflect.DeepEqual(got, test.expected) {
 				t.Fatalf("got:      %+v\nexpected: %+v", got, test.expected)
 			}
 		})
+	}
+}
+
+func TestFileMultiSeasonSeries(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		title string
+	}{
+		{
+			name:  "Example Show seasons 1 through 21",
+			input: "Example.Show.Uncensored.S01-S21.720p.BluRay.x265-ExampleTeam",
+			title: "Example Show Uncensored",
+		},
+		{
+			name:  "Season word range",
+			input: "Example.Show.Season.1-4.S01-S04.1080p.WEB-DL.x265-GROUP",
+			title: "Example Show",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := File(test.input)
+			if got.Type != Show || got.Title != test.title || got.Season != 0 || got.Episode != 0 {
+				t.Fatalf("File(%q) = %+v, want multi-season series %q", test.input, got, test.title)
+			}
+		})
+	}
+}
+
+func TestFileRepeatedSeasonRanges(t *testing.T) {
+	for _, markers := range []string{
+		"Season.1-4.S01-S04",
+		"S01-S04.Season.1-4",
+		"Season.1-4.Season.1-4",
+	} {
+		for _, group := range []string{"", "GROUP"} {
+			input := "Example.Show." + markers + ".1080p.x265"
+			if group != "" {
+				input += "-" + group
+			}
+			t.Run(input, func(t *testing.T) {
+				want := Info{
+					Type: Show, Title: "Example Show", ScreenSize: "1080p",
+					VideoCodec: "H.265", ReleaseGroup: group,
+				}
+				if got := File(input); !reflect.DeepEqual(got, want) {
+					t.Fatalf("File(%q) = %+v, want %+v", input, got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestFileSeasonPackWithWebsiteSuffix(t *testing.T) {
+	name := "Example.Show.s01.HD720p.WEBRip.Rus.ExampleSite.tv"
+	got := File(name)
+	if got.Type != ShowSeason || got.Title != "Example Show" || got.Season != 1 {
+		t.Fatalf("File(%q) = %+v, want a season 1 pack for Example Show", name, got)
 	}
 }
 
@@ -129,7 +192,7 @@ func TestFileFallsBackToVideo(t *testing.T) {
 
 	for _, name := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got, expected := File(name), Video(name); got != expected {
+			if got, expected := File(name), Video(name); !reflect.DeepEqual(got, expected) {
 				t.Fatalf("got:      %+v\nexpected: %+v", got, expected)
 			}
 			if got := File(name); got.Type == ShowSeason {
