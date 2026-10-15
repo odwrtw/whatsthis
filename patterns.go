@@ -17,16 +17,24 @@ var (
 	reSeasonEpisodeRange = regexp.MustCompile(`(?i)\bS(\d{1,3})[\s.]?E(\d{1,3})\s*-\s*E?(\d{1,3})\b`)
 
 	// Standalone season patterns: S01 and Season 1.
-	reSeasonOnly      = regexp.MustCompile(`(?i)\bS(\d{1,3})\b`)
-	reSeasonWordOnly  = regexp.MustCompile(`(?i)\bSeason[\s._-]*(\d{1,3})\b`)
+	reSeasonOnly      = regexp.MustCompile(`(?i)\bSn?(\d{1,3})\b`)
+	reSeasonWordOnly  = regexp.MustCompile(`(?i)\b(?:Season|Saison|Temp)[\s._-]*(\d{1,3})\b`)
+	reSeasonOrdinal   = regexp.MustCompile(`(?i)\b(\d{1,3})(?:st|nd|rd|th)\s+Season\b`)
 	reSeasonRange     = regexp.MustCompile(`(?i)\bS(\d{1,3})\s*-\s*S?(\d{1,3})\b`)
 	reSeasonWordRange = regexp.MustCompile(`(?i)\bSeason[\s._-]*(\d{1,3})\s*-\s*(?:Season[\s._-]*)?(\d{1,3})\b`)
 
-	// SxxExx pattern: S01E02, s01e02, S003E03 (case-insensitive).
-	reSeasonEpisode = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])S(\d{1,3})[\s.]?E(\d{1,3})(?:$|[^A-Za-z0-9])`)
+	// Explicit markers may have spaced components, year seasons, long episode
+	// numbers, or a split-episode suffix such as S01E02b.
+	reSeasonEpisode = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])S(\d{1,4})[\s.x-]*Ep?[\s.#-]*(\d{1,4})(?:$|[^0-9])`)
+	reCrossEpisode  = regexp.MustCompile(`(?i)(\d{1,2})x(\d{1,3})`)
 
-	// NxNN pattern: 1x02, 10x20.
-	reCrossEpisode = regexp.MustCompile(`(?i)\b(\d{1,2})x(\d{2})\b`)
+	reWordSeasonEpisode  = regexp.MustCompile(`(?i)\bEpisode\s+(\d{1,2})\.(\d{1,3})\b`)
+	reLooseSeasonEpisode = regexp.MustCompile(`(?i)\bS(\d{1,3})[\s.-]+(\d{1,4})\b`)
+	reEpisodeOnly        = regexp.MustCompile(`(?i)\b(?:Episodes?|Ep|E|Cap(?:itulo)?)[\s.#-]*(\d{1,4})(?:v\d+)?(?:$|[^A-Za-z0-9])`)
+	reAbsoluteEpisode    = regexp.MustCompile(`(?i)(?:^|[\s.])-[\s.]+(\d{1,4})(?:[ab])?(?:v\d+)?(?:$|[\s.(\[])`)
+	reLeadingEpisode     = regexp.MustCompile(`^(\d{2,3})[\s.-]+`)
+	reAnimeEpisode       = regexp.MustCompile(`(?i)(?:^|[\s.])(\d{2,4})(?:v\d+)?(?:$|[\s.(\[])`)
+	reEpisodeAfterSeason = regexp.MustCompile(`^[\s.()\[\]-]*(\d{1,4})(?:$|[\s.(\[])`)
 
 	// Compact episode: 3-4 digits where first 1-2 are season, last 2 are episode.
 	// E.g., 217 -> S02E17, 1316 -> S13E16, 104 -> S01E04.
@@ -43,18 +51,22 @@ var reScreenSize = regexp.MustCompile(`(?i)(?:^|[.\s_\[(])(?:HD)?(2160|1440|1080
 // Known pixel dimensions normalized to the screen-size notation used by Info.
 var screenSizeDimensions = map[string]string{
 	"1920x1080": "1080p",
+	"1920x960":  "1080p",
+	"1280x544":  "720p",
+	"3840x1632": "2160p",
 }
 
 // Screen size token patterns, with optional HD and progressive-scan markers.
 var (
-	reScreenSizeToken       = regexp.MustCompile(`(?i)^(?:HD)?(2160|1440|1080|720|540|480)p$`)
+	reScreenSizeToken       = regexp.MustCompile(`(?i)^(?:HD)?(2160|1440|1080|720|540|480)([pi])$`)
 	reScreenSizeNumberToken = regexp.MustCompile(`(?i)^(2160|1080|720|540|480)$`)
 )
 
 // Video codec patterns.
 var (
 	reVideoCodecH264 = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])(?:x\.?264|h\.?264|avc)(?:$|[^A-Za-z0-9])`)
-	reVideoCodecH265 = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])(?:x\.?265|h\.?265|hevc)(?:$|[^A-Za-z0-9])`)
+	reVideoCodecH265 = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])(?:x\.?265|h\.?265|hevc(?:10)?)(?:$|[^A-Za-z0-9])`)
+	reVideoCodecXvid = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])xvid(?:$|[^A-Za-z0-9])`)
 	reVideoCodecAV1  = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])av1(?:$|[^A-Za-z0-9])`)
 	reVideoCodecVP9  = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])vp9(?:$|[^A-Za-z0-9])`)
 	reVideoCodecVC1  = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])vc-?1(?:$|[^A-Za-z0-9])`)
@@ -70,10 +82,10 @@ var (
 	reAudioDDP = regexp.MustCompile(`(?i)(?:\bDDP[\s.]?\d[\s.]?\d\b|\bDD\+[\s.]?\d[\s.]?\d\b)`)
 
 	// Dolby Digital (non-plus): DD followed by channel config, or AC3.
-	reAudioDD = regexp.MustCompile(`(?i)(?:\bDD[\s.]?\d[\s.]?\d\b|\bAC[\s.]?3\b)`)
+	reAudioDD = regexp.MustCompile(`(?i)(?:\bDD[\s.]?\d[\s.]?\d\b|\bAC[\s.-]?3\b|\bDolbyD\b)`)
 
 	// EAC3 (Enhanced AC-3, a.k.a. Dolby Digital Plus).
-	reAudioEAC3 = regexp.MustCompile(`(?i)\bE[\s.]?AC[\s.]?3\b`)
+	reAudioEAC3 = regexp.MustCompile(`(?i)\bE[\s.-]?AC[\s.-]?3\b`)
 
 	// AAC with optional channel config.
 	reAudioAAC = regexp.MustCompile(`(?i)\bAAC(?:[\s.]?\d[\s.]?\d)?\b`)
@@ -83,6 +95,7 @@ var (
 	reAudioFLAC   = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])FLAC(?:$|[^A-Za-z0-9])`)
 	reAudioOPUS   = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])OPUS(?:$|[^A-Za-z0-9])`)
 	reAudioTrueHD = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])TRUEHD(?:$|[^A-Za-z0-9])`)
+	reAudioMP3    = regexp.MustCompile(`(?i)\bMP3\b`)
 )
 
 // Container / MIME type mappings.
@@ -96,6 +109,7 @@ var containerMIME = map[string]string{
 	"ts":   "video/mp2t",
 	"wmv":  "video/x-ms-wmv",
 	"flv":  "video/x-flv",
+	"srt":  "application/x-subrip",
 }
 
 // knownMetadataTokens are tokens that indicate we've left the title area.
@@ -126,6 +140,8 @@ var knownMetadataTokens = map[string]bool{
 	"hd":     true,
 	"dvdscr": true, "camrip": true, "hdts": true, "hdcam": true,
 	"new": true, "dual": true, "vof": true, "multi": true,
+	"french": true, "truefrench": true, "vostfr": true, "german": true,
+	"dl": true, "uncut": true, "unrated": true, "dc": true,
 }
 
 // Common three-letter language tags used in release names, normalized to English names.
@@ -185,7 +201,7 @@ var (
 	reEmptyParen = regexp.MustCompile(`\(\s*\)`)
 
 	// Matches optional whole-season annotations.
-	reComplete = regexp.MustCompile(`(?i)\[?\bCOMPLETE\b\]?`)
+	reComplete = regexp.MustCompile(`(?i)\[?\b(?:The[\s._-]+)?COMPLETE\b\]?`)
 
 	// Matches bracketed whole-season descriptors and non-group file tags.
 	reSeasonDescriptorBracket = regexp.MustCompile(`(?i)\[\s*(?:S\d{1,3}|Season[\s._-]*\d{1,3})\b[^\]]*\]`)
