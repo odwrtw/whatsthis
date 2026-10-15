@@ -20,8 +20,19 @@ function setUnavailable(message) {
 function render(info) {
   for (const output of outputFields) {
     const value = info[output.dataset.field];
-    const empty = value === "" || value === 0 || value == null;
-    output.textContent = empty ? "—" : String(value);
+    const empty =
+      value === "" ||
+      value === 0 ||
+      value === false ||
+      value == null ||
+      (Array.isArray(value) && value.length === 0);
+    output.textContent = empty
+      ? "—"
+      : Array.isArray(value)
+        ? value.join(", ")
+        : value === true
+          ? "Yes"
+          : String(value);
   }
   result.hidden = false;
 }
