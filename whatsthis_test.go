@@ -11,10 +11,17 @@ import (
 type entry struct {
 	FileName string `json:"filename"`
 	Expected Info   `json:"expected"`
+	Parser   string `json:"parser,omitempty"`
 }
 
-func testGuessFromFile(t *testing.T, filename string, parse func(string) Info) {
+func testGuessFromFile(t *testing.T, filename, parser string) {
 	t.Helper()
+
+	parsers := map[string]func(string) Info{"video": Video, "file": File}
+	parse, ok := parsers[parser]
+	if !ok {
+		t.Fatalf("unsupported parser %q", parser)
+	}
 
 	content, err := os.ReadFile(filename) //nolint:gosec // test data paths are not user-controlled
 	if err != nil {
@@ -27,6 +34,14 @@ func testGuessFromFile(t *testing.T, filename string, parse func(string) Info) {
 	}
 
 	for _, e := range entries {
+		if e.Parser != "" {
+			if _, ok := parsers[e.Parser]; !ok {
+				t.Fatalf("unsupported parser %q for %s", e.Parser, e.FileName)
+			}
+			if e.Parser != parser {
+				continue
+			}
+		}
 		got := parse(e.FileName)
 		if !reflect.DeepEqual(got, e.Expected) {
 			t.Errorf("filename: %s\ngot:      %+v\nexpected: %+v", e.FileName, got, e.Expected)
@@ -35,15 +50,20 @@ func testGuessFromFile(t *testing.T, filename string, parse func(string) Info) {
 }
 
 func TestGuessMovies(t *testing.T) {
-	testGuessFromFile(t, "testdata/movies-testdata.json", Video)
+	t.Run("Video", func(t *testing.T) {
+		testGuessFromFile(t, "testdata/movies-testdata.json", "video")
+	})
+	t.Run("File", func(t *testing.T) {
+		testGuessFromFile(t, "testdata/movies-testdata.json", "file")
+	})
 }
 
 func TestGuessTvShows(t *testing.T) {
 	t.Run("Video", func(t *testing.T) {
-		testGuessFromFile(t, "testdata/tvshows-testdata.json", Video)
+		testGuessFromFile(t, "testdata/tvshows-testdata.json", "video")
 	})
 	t.Run("File", func(t *testing.T) {
-		testGuessFromFile(t, "testdata/tvshows-testdata.json", File)
+		testGuessFromFile(t, "testdata/tvshows-testdata.json", "file")
 	})
 }
 
