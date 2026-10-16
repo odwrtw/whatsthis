@@ -18,10 +18,10 @@ var (
 
 	// Standalone season patterns: S01 and Season 1.
 	reSeasonOnly      = regexp.MustCompile(`(?i)\bSn?(\d{1,3})\b`)
-	reSeasonWordOnly  = regexp.MustCompile(`(?i)\b(?:Season|Saison|Temp)[\s._-]*(\d{1,3})\b`)
+	reSeasonWordOnly  = regexp.MustCompile(`(?i)\b(?:Seasons?|Saisons?|Temp)[\s._-]*(\d{1,3})\b`)
 	reSeasonOrdinal   = regexp.MustCompile(`(?i)\b(\d{1,3})(?:st|nd|rd|th)\s+Season\b`)
-	reSeasonRange     = regexp.MustCompile(`(?i)\bS(\d{1,3})\s*-\s*S?(\d{1,3})\b`)
-	reSeasonWordRange = regexp.MustCompile(`(?i)\bSeason[\s._-]*(\d{1,3})\s*-\s*(?:Season[\s._-]*)?(\d{1,3})\b`)
+	reSeasonRange     = regexp.MustCompile(`(?i)\bSn?(\d{1,3})\s*-\s*(?:Sn?)?(\d{1,3})\b`)
+	reSeasonWordRange = regexp.MustCompile(`(?i)\b(?:Seasons?|Saisons?|Temp)[\s._-]*(\d{1,3})\s*-\s*(?:(?:Seasons?|Saisons?|Temp)[\s._-]*)?(\d{1,3})\b`)
 
 	// Explicit markers may have spaced components, year seasons, long episode
 	// numbers, or a split-episode suffix such as S01E02b.
@@ -45,9 +45,6 @@ var (
 // Boundaries include dots, spaces, underscores, parentheses, and brackets.
 var reYear = regexp.MustCompile(`(?:^|[.\s_(\[\]])(((?:19|20)\d{2}))(?:[.\s_)\]]|$)`)
 
-// Screen size patterns.
-var reScreenSize = regexp.MustCompile(`(?i)(?:^|[.\s_\[(])(?:HD)?(2160|1440|1080|720|540|480)p(?:$|[.\s_\])])`)
-
 // Known pixel dimensions normalized to the screen-size notation used by Info.
 var screenSizeDimensions = map[string]string{
 	"1920x1080": "1080p",
@@ -59,7 +56,7 @@ var screenSizeDimensions = map[string]string{
 // Screen size token patterns, with optional HD and progressive-scan markers.
 var (
 	reScreenSizeToken       = regexp.MustCompile(`(?i)^(?:HD)?(2160|1440|1080|720|540|480)([pi])$`)
-	reScreenSizeNumberToken = regexp.MustCompile(`(?i)^(2160|1080|720|540|480)$`)
+	reScreenSizeNumberToken = regexp.MustCompile(`(?i)^(2160|1440|1080|720|540|480)$`)
 )
 
 // Video codec patterns.
@@ -140,11 +137,13 @@ var knownMetadataTokens = map[string]bool{
 	"hd":     true,
 	"dvdscr": true, "camrip": true, "hdts": true, "hdcam": true,
 	"new": true, "dual": true, "vof": true, "multi": true,
-	"french": true, "truefrench": true, "vostfr": true, "german": true,
-	"dl": true, "uncut": true, "unrated": true, "dc": true,
+	"multiple": true, "dl": true, "audio": true,
+	"sub": true, "subs": true, "subtitle": true, "subtitles": true,
+	"uncut": true, "unrated": true, "dc": true,
 }
 
-// Common three-letter language tags used in release names, normalized to English names.
+// Common release language codes, names, and aliases, normalized to English names.
+// Short codes and full names require context when locating the title boundary.
 var releaseLanguageNames = map[string]string{
 	"eng": "English", "ita": "Italian", "rus": "Russian", "ukr": "Ukrainian",
 	"ger": "German", "deu": "German", "fre": "French", "fra": "French",
@@ -159,6 +158,19 @@ var releaseLanguageNames = map[string]string{
 	"rum": "Romanian", "ron": "Romanian", "bul": "Bulgarian", "hrv": "Croatian",
 	"srp": "Serbian", "slv": "Slovenian", "est": "Estonian", "lav": "Latvian",
 	"lit": "Lithuanian", "isl": "Icelandic",
+	"en": "English", "fr": "French", "de": "German", "it": "Italian",
+	"es": "Spanish", "pt": "Portuguese", "pl": "Polish", "ru": "Russian", "uk": "Ukrainian",
+	"ja": "Japanese", "ko": "Korean", "zh": "Chinese", "hi": "Hindi",
+	"english": "English", "french": "French", "german": "German", "italian": "Italian",
+	"spanish": "Spanish", "portuguese": "Portuguese", "polish": "Polish",
+	"russian": "Russian", "ukrainian": "Ukrainian", "japanese": "Japanese",
+	"korean": "Korean", "chinese": "Chinese", "hindi": "Hindi", "turkish": "Turkish",
+	"dutch": "Dutch", "swedish": "Swedish", "danish": "Danish", "finnish": "Finnish",
+	"czech": "Czech", "slovak": "Slovak", "hungarian": "Hungarian", "greek": "Greek",
+	"hebrew": "Hebrew", "arabic": "Arabic", "thai": "Thai", "vietnamese": "Vietnamese",
+	"indonesian": "Indonesian", "romanian": "Romanian", "bulgarian": "Bulgarian",
+	"croatian": "Croatian", "serbian": "Serbian", "slovenian": "Slovenian",
+	"estonian": "Estonian", "latvian": "Latvian", "lithuanian": "Lithuanian", "icelandic": "Icelandic",
 }
 
 // Episode title separator: " - " after SxxExx indicates an episode title, not a release group.

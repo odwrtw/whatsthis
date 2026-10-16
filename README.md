@@ -33,6 +33,19 @@ fmt.Println(info.Season)  // 1
 fmt.Println(info.Episode) // 0
 ```
 
+Explicit multi-season ranges are returned as a sorted, deduplicated `Seasons` list:
+
+```go
+info := whatsthis.File("Example.Show.S02-S04.1080p.x265-GROUP")
+fmt.Println(info.Type)    // show
+fmt.Println(info.Seasons) // [2 3 4]
+fmt.Println(info.Season)  // 0
+```
+
+`Seasons` is nil for movies, episodes, and single-season releases, and omitted from JSON when nil. Overlapping ranges are merged; gaps between separate ranges are preserved. Descending ranges are not expanded. As with single-season packs, collection detection applies to extensionless release names, not video filenames.
+
+`Languages` combines explicit audio and subtitle language tags (for example, `FRENCH`, `ENG`, uppercase `FR`, `VOSTFR`, and `SweSub`), normalized to English names in encounter order without duplicates. `Multilingual` indicates multiple distinct languages or a generic `MULTi`, `Multiple Subtitle`, `DUAL`, or `DL` marker; `WEB-DL` alone does not set it. These fields do **not** establish which audio tracks are present, and unspecified languages are not inferred.
+
 ## WebAssembly demo
 
 The static web interface runs `whatsthis.File` entirely in the browser; names are not uploaded anywhere.

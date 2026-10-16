@@ -3,6 +3,7 @@ package whatsthis
 import (
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -16,7 +17,7 @@ func isTokenSep(r rune) bool {
 
 // isMetaSep splits on all metadata-region separators including brackets and hyphens.
 func isMetaSep(r rune) bool {
-	return r == '.' || r == ' ' || r == '_' || r == '[' || r == ']' || r == '(' || r == ')' || r == '-'
+	return r == '.' || r == ' ' || r == '_' || r == '[' || r == ']' || r == '(' || r == ')' || r == '-' || r == '+' || r == '&'
 }
 
 // parse extracts metadata from a video filename.
@@ -53,7 +54,7 @@ func parse(input string) Info {
 		titleRegion = reEpisodeSourceSuffix.ReplaceAllString(titleRegion, "")
 		// Handle " - Episode Title" and pure episode title patterns.
 		metaRegion = stripEpisodeTitle(metaRegion)
-		g.Languages, g.Multilingual = extractLanguages(metaRegion)
+		g.Languages, g.Multilingual = extractLanguages(leadingBracketTags(name) + " " + metaRegion)
 
 		g.ReleaseGroup, metaRegion = extractReleaseGroup(metaRegion, doubleExtBracket)
 		g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
@@ -73,7 +74,7 @@ func parse(input string) Info {
 		titleRegion = cleanedTitleRegion
 
 		g.Year, metaRegion = extractYear(metaRegion)
-		g.Languages, g.Multilingual = extractLanguages(metaRegion)
+		g.Languages, g.Multilingual = extractLanguages(leadingBracketTags(name) + " " + metaRegion)
 		g.ReleaseGroup, metaRegion = extractReleaseGroup(metaRegion, doubleExtBracket)
 		g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
 		if prefixGroup != "" {
@@ -93,11 +94,14 @@ func parse(input string) Info {
 func parseSeasonName(name string) (Info, bool) {
 	season, markerStart, markerEnd, ok := extractSeasonName(name)
 	typ := ShowSeason
-	if seriesStart, seriesEnd, isSeries := extractSeriesName(name); isSeries {
+	seasons, seriesStart, seriesEnd := extractSeriesName(name)
+	if len(seasons) > 1 {
 		season = 0
 		markerStart, markerEnd = seriesStart, seriesEnd
 		typ = Show
 		ok = true
+	} else {
+		seasons = nil
 	}
 	if !ok {
 		return Info{}, false
@@ -105,7 +109,7 @@ func parseSeasonName(name string) (Info, bool) {
 	// A season followed by an episode is not a pack. Keep the existing
 	// explicit episode-range and multi-season collection policies.
 	wholeEpisodeRange := false
-	for _, m := range reSeasonEpisodeRange.FindAllStringSubmatch(name, -1) {
+	for _, m := range reSeasonEpisodeRange.FindAllStringSubmatch(strings.ReplaceAll(name, "_", " "), -1) {
 		first, _ := strconv.Atoi(m[2])
 		last, _ := strconv.Atoi(m[3])
 		wholeEpisodeRange = wholeEpisodeRange || first == 1 && last > first
@@ -117,13 +121,13 @@ func parseSeasonName(name string) (Info, bool) {
 	}
 
 	g := Info{
-		Type:   typ,
-		Season: season,
+		Type:    typ,
+		Season:  season,
+		Seasons: seasons,
 	}
 
 	titleRegion := reComplete.ReplaceAllString(name[:markerStart], " ")
 	metaRegion := name[markerEnd:]
-	metaRegion = reSeasonDescriptorBracket.ReplaceAllString(metaRegion, " ")
 	metaRegion = stripSeasonNameMarkers(metaRegion)
 	metaRegion = reComplete.ReplaceAllString(metaRegion, " ")
 	metaRegion = reFileSizeBracket.ReplaceAllString(metaRegion, " ")
@@ -135,7 +139,7 @@ func parseSeasonName(name string) (Info, bool) {
 	if g.Year == 0 {
 		g.Year, metaRegion = extractYear(metaRegion)
 	}
-	g.Languages, g.Multilingual = extractLanguages(metaRegion)
+	g.Languages, g.Multilingual = extractLanguages(leadingBracketTags(name) + " " + metaRegion)
 
 	if explicitGroup != "" {
 		g.ReleaseGroup = explicitGroup
@@ -157,26 +161,38 @@ type seasonNameMarker struct {
 	end    int
 }
 
-// extractSeriesName finds an explicit range spanning multiple seasons.
-func extractSeriesName(name string) (start, end int, ok bool) {
-	firstStart := len(name)
+// extractSeriesName collects ascending explicit ranges, merging repeated and
+// overlapping ranges without inventing seasons between disjoint ranges.
+func extractSeriesName(name string) (seasons []int, start, end int) {
+	name = strings.ReplaceAll(name, "_", " ")
+	start, end = -1, -1
+	seen := make(map[int]bool)
 	for _, re := range []*regexp.Regexp{reSeasonRange, reSeasonWordRange} {
 		for _, match := range re.FindAllStringSubmatchIndex(name, -1) {
 			firstSeason, _ := strconv.Atoi(name[match[2]:match[3]])
 			lastSeason, _ := strconv.Atoi(name[match[4]:match[5]])
-			if firstSeason != lastSeason && match[0] < firstStart {
+			if lastSeason < firstSeason || hasPrecedingMetadata(name[:match[0]]) {
+				continue
+			}
+			if start < 0 || match[0] < start {
 				start, end = match[0], match[1]
-				firstStart = match[0]
-				ok = true
+			}
+			for season := firstSeason; season <= lastSeason; season++ {
+				if !seen[season] {
+					seasons = append(seasons, season)
+					seen[season] = true
+				}
 			}
 		}
 	}
-	return start, end, ok
+	slices.Sort(seasons)
+	return seasons, start, end
 }
 
 // extractSeasonName finds markers that identify a whole-season release. When
 // multiple markers are present, they must all name the same season.
 func extractSeasonName(name string) (season, start, end int, ok bool) {
+	name = strings.ReplaceAll(name, "_", " ")
 	var markers []seasonNameMarker
 
 	for _, m := range reSeasonEpisodeRange.FindAllStringSubmatchIndex(name, -1) {
@@ -218,12 +234,15 @@ func extractSeasonName(name string) (season, start, end int, ok bool) {
 }
 
 func stripSeasonNameMarkers(meta string) string {
-	meta = reSeasonEpisodeRange.ReplaceAllString(meta, " ")
-	meta = reSeasonRange.ReplaceAllString(meta, " ")
-	meta = reSeasonWordRange.ReplaceAllString(meta, " ")
-	meta = reSeasonOnly.ReplaceAllString(meta, " ")
-	meta = reSeasonOrdinal.ReplaceAllString(meta, " ")
-	return reSeasonWordOnly.ReplaceAllString(meta, " ")
+	for _, re := range []*regexp.Regexp{reSeasonDescriptorBracket, reSeasonEpisodeRange, reSeasonRange, reSeasonWordRange, reSeasonOnly, reSeasonOrdinal, reSeasonWordOnly} {
+		// Normalize only for matching: preserve underscores in release groups.
+		matches := re.FindAllStringIndex(strings.ReplaceAll(meta, "_", " "), -1)
+		for i := len(matches) - 1; i >= 0; i-- {
+			m := matches[i]
+			meta = meta[:m[0]] + " " + meta[m[1]:]
+		}
+	}
+	return meta
 }
 
 // normalizeSeasonMeta removes punctuation around a season marker. A leading
@@ -344,9 +363,9 @@ func extractSeasonEpisode(name string) (season, episode, start, end int) {
 			}
 		}
 	}
-	if m := reEpisodeOnly.FindStringSubmatchIndex(name); m != nil {
+	for _, m := range reEpisodeOnly.FindAllStringSubmatchIndex(name, -1) {
 		// In a year-labelled movie, "Episode 1" can be part of the title.
-		if seasonStart >= 0 || reYear.FindStringIndex(name[m[3]:]) == nil {
+		if !hasPrecedingMetadata(name[:m[0]]) && (seasonStart >= 0 || reYear.FindStringIndex(name[m[3]:]) == nil) {
 			e, _ := strconv.Atoi(name[m[2]:m[3]])
 			start := m[0]
 			if seasonStart >= 0 && seasonStart < start {
@@ -397,7 +416,7 @@ func extractSeasonEpisode(name string) (season, episode, start, end int) {
 	// season/episode split (One Piece 1098 is episode 1098, not S10E98).
 	if strings.HasPrefix(name, "[") {
 		for _, m := range reAnimeEpisode.FindAllStringSubmatchIndex(name, -1) {
-			if seasonStart >= 0 && reScreenSizeNumberToken.MatchString(name[m[2]:m[3]]) {
+			if hasPrecedingMetadata(name[:m[2]]) || seasonStart >= 0 && reScreenSizeNumberToken.MatchString(name[m[2]:m[3]]) {
 				continue
 			}
 			e, _ := strconv.Atoi(name[m[2]:m[3]])
@@ -517,7 +536,7 @@ func hasMetadataTokens(s string) bool {
 		if knownMetadataTokens[tok] {
 			return true
 		}
-		if _, ok := releaseLanguageNames[tok]; ok || reScreenSize.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
+		if releaseLanguageName(tok) != "" || reScreenSizeToken.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
 			return true
 		}
 		if _, ok := screenSizeDimensions[tok]; ok {
@@ -578,6 +597,13 @@ func extractReleaseGroup(meta, doubleExtBracket string) (group, remaining string
 				}
 			}
 			if hasMetadataTokens(bracketContent) {
+				// Metadata brackets can precede a conventional trailing group.
+				// Parse that suffix without losing the bracket's metadata or order.
+				if tail := meta[idx+endIdx+1:]; strings.TrimSpace(tail) != "" {
+					if suffixGroup, suffixMeta := extractReleaseGroup(tail, ""); suffixGroup != "" && !strings.ContainsAny(suffixGroup, " ()") {
+						return suffixGroup, meta[:idx+endIdx+1] + suffixMeta
+					}
+				}
 				priorGroup, before := extractReleaseGroup(beforeBracket, "")
 				return priorGroup, strings.TrimSpace(before + " " + meta[idx:])
 			}
@@ -689,20 +715,77 @@ func lastDotSeparatedToken(s string) string {
 	return tokens[len(tokens)-1]
 }
 
+// leadingBracketTags makes leading language tags available without scanning
+// title words for languages. Website tags must not become languages (.pl).
+func leadingBracketTags(name string) string {
+	name = strings.TrimSpace(name)
+	var tags []string
+	for strings.HasPrefix(name, "[") {
+		end := strings.IndexByte(name, ']')
+		if end < 0 {
+			break
+		}
+		content := name[1:end]
+		if !isWebsiteLike(content) {
+			// Explicit bracket tags establish context even without technical tags.
+			tags = append(tags, strings.ToUpper(content))
+		}
+		name = strings.TrimLeft(name[end+1:], " ._-")
+	}
+	return strings.Join(tags, " ")
+}
+
+// releaseLanguageName handles explicit language tags, including subtitle
+// affixes (VOSTFR, SweSub) and the TRUEFRENCH audio-language marker.
+func releaseLanguageName(token string) string {
+	if language := releaseLanguageNames[token]; language != "" {
+		return language
+	}
+	for _, prefix := range []string{"vost", "true"} {
+		if rest, ok := strings.CutPrefix(token, prefix); ok {
+			if language := releaseLanguageNames[rest]; language != "" {
+				return language
+			}
+		}
+	}
+	for _, suffix := range []string{"subtitles", "subtitle", "subs", "sub", "audio"} {
+		if rest, ok := strings.CutSuffix(token, suffix); ok {
+			if language := releaseLanguageNames[rest]; language != "" {
+				return language
+			}
+		}
+	}
+	return ""
+}
+
 // extractLanguages identifies generic multilingual markers and explicit
-// language tags from the metadata region.
+// audio or subtitle language tags from the metadata region.
 func extractLanguages(meta string) ([]string, bool) {
 	var languages []string
 	seen := make(map[string]bool)
 	multilingual := false
 
-	for _, token := range strings.FieldsFunc(meta, isMetaSep) {
+	tokens := strings.FieldsFunc(meta, isMetaSep)
+	for i, token := range tokens {
 		lower := strings.ToLower(token)
-		if lower == "multi" {
-			multilingual = true
+		upper := token == strings.ToUpper(token)
+		metadataNeighbor := i > 0 && isKnownToken(tokens[i-1]) || i+1 < len(tokens) && isKnownToken(tokens[i+1])
+		switch lower {
+		case "multi", "multiple", "dual", "dl":
+			// DL means dual language, except in the source tag WEB-DL.
+			if lower == "dl" && i > 0 && strings.EqualFold(tokens[i-1], "web") {
+				continue
+			}
+			multilingual = multilingual || upper || metadataNeighbor
 			continue
 		}
-		if language, ok := releaseLanguageNames[lower]; ok && !seen[language] {
+		language := releaseLanguageName(lower)
+		// Weak words and short codes can also be episode-title text (It Was
+		// the Change, Cinco de Mayo, Greek Life). Require release-tag context.
+		if len(lower) == 2 && !upper || strings.EqualFold(lower, language) && !upper && !metadataNeighbor {
+			continue
+		}
+		if language != "" && !seen[language] {
 			languages = append(languages, language)
 			seen[language] = true
 		}
@@ -726,7 +809,7 @@ func isKnownToken(tok string) bool {
 	if knownMetadataTokens[tok] {
 		return true
 	}
-	if _, ok := releaseLanguageNames[tok]; ok {
+	if releaseLanguageName(tok) != "" {
 		return true
 	}
 	if _, ok := screenSizeDimensions[tok]; ok {
@@ -735,7 +818,7 @@ func isKnownToken(tok string) bool {
 	if parts := strings.Split(tok, "-"); len(parts) > 1 {
 		allLanguages := true
 		for _, part := range parts {
-			if _, ok := releaseLanguageNames[part]; !ok {
+			if releaseLanguageName(part) == "" {
 				allLanguages = false
 				break
 			}
@@ -748,7 +831,7 @@ func isKnownToken(tok string) bool {
 	if compact != tok && knownMetadataTokens[compact] {
 		return true
 	}
-	if reScreenSize.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
+	if reScreenSizeToken.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
 		return true
 	}
 	if extractVideoCodec(tok) != "" || extractAudioCodec(tok) != "" {
@@ -946,7 +1029,7 @@ func isNumericLike(s string) bool {
 // A numeric series title such as 1923 is not an otherwise empty release year.
 func extractTitleYear(title string) (int, string) {
 	year, remaining := extractYear(title)
-	if strings.Trim(remaining, " ._-()[]") == "" {
+	if strings.Trim(stripBracketTags(remaining), " ._-()[]") == "" {
 		return 0, title
 	}
 	return year, remaining
@@ -1003,7 +1086,7 @@ func splitMovieRegions(name string) (titleRegion, metaRegion string) {
 			if strings.Trim(stripBracketTags(name[:span[0]]), " ._-") == "" {
 				continue
 			}
-			if hasTechnicalMetadata(name[span[0]:span[1]]) {
+			if hasMetadataTokens(name[span[0]:span[1]]) {
 				split = span[0]
 				break
 			}
@@ -1063,8 +1146,23 @@ func firstMetadataTokenIndex(s string) int {
 		if t.tok == "0" || t.tok == "1" {
 			continue
 		}
+		language := releaseLanguageName(t.tok)
+		weakLanguage := language != "" && (len(t.tok) == 2 || strings.EqualFold(t.tok, language))
+		if weakLanguage {
+			// A language word alone can be the title (French), and short codes
+			// need uppercase release-tag context (not This Is It).
+			original := s[t.start : t.start+len(t.tok)]
+			if i == 0 || len(t.tok) == 2 && original != strings.ToUpper(original) ||
+				i+1 == len(tokens) || !isKnownToken(tokens[i+1].tok) {
+				continue
+			}
+		}
 		switch t.tok {
-		case "french", "german", "truefrench", "vostfr", "dl", "uncut", "unrated", "dc":
+		case "audio", "sub", "subs", "subtitle", "subtitles", "multiple":
+			if i == 0 || i+1 == len(tokens) || !isKnownToken(tokens[i+1].tok) {
+				continue
+			}
+		case "truefrench", "vostfr", "dl", "uncut", "unrated", "dc":
 			if i+1 == len(tokens) || !isKnownToken(tokens[i+1].tok) {
 				continue
 			}
@@ -1243,22 +1341,11 @@ func extractTitle(titleRegion string, seStart, seEnd int, fullName string) strin
 
 // extractTitleBeforeMetadata gets the title portion before metadata tokens start.
 func extractTitleBeforeMetadata(s string) string {
-	tokens := strings.FieldsFunc(s, isTokenSep)
-
-	lowerTokens := make([]string, len(tokens))
-	for i, t := range tokens {
-		lowerTokens[i] = strings.ToLower(t)
+	s = stripBracketTags(s)
+	if boundary := firstMetadataTokenIndex(s); boundary >= 0 {
+		s = s[:boundary]
 	}
-
-	var titleTokens []string
-	for i := range tokens {
-		if isKnownToken(lowerTokens[i]) || isCodecLetterInContext(lowerTokens, i) || isCodecNumberInContext(lowerTokens, i) {
-			break
-		}
-		titleTokens = append(titleTokens, tokens[i])
-	}
-
-	return strings.Join(titleTokens, " ")
+	return strings.Join(strings.FieldsFunc(s, isTokenSep), " ")
 }
 
 // cleanTitle converts a raw title region into a clean title string.

@@ -25,7 +25,7 @@ func testGuessFromFile(t *testing.T, filename, parser string) {
 
 	content, err := os.ReadFile(filename) //nolint:gosec // test data paths are not user-controlled
 	if err != nil {
-		t.Skipf("%s not available", filename)
+		t.Fatalf("read required fixture %s: %v", filename, err)
 	}
 
 	var entries []entry
@@ -42,10 +42,11 @@ func testGuessFromFile(t *testing.T, filename, parser string) {
 				continue
 			}
 		}
-		got := parse(e.FileName)
-		if !reflect.DeepEqual(got, e.Expected) {
-			t.Errorf("filename: %s\ngot:      %+v\nexpected: %+v", e.FileName, got, e.Expected)
-		}
+		t.Run(e.FileName, func(t *testing.T) {
+			if got := parse(e.FileName); !reflect.DeepEqual(got, e.Expected) {
+				t.Errorf("got:      %+v\nexpected: %+v", got, e.Expected)
+			}
+		})
 	}
 }
 
