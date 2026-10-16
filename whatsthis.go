@@ -23,19 +23,27 @@ const (
 
 // Info holds structured metadata extracted from a filename or release name.
 type Info struct {
-	Type         Type     `json:"type"`
-	Title        string   `json:"title"`
-	Episode      int      `json:"episode"`
-	Season       int      `json:"season"`
-	Year         int      `json:"year"`
-	ScreenSize   string   `json:"screen_size"`
-	ReleaseGroup string   `json:"release_group"`
-	AudioCodec   string   `json:"audio_codec"`
-	VideoCodec   string   `json:"video_codec"`
-	Languages    []string `json:"languages"`
-	Multilingual bool     `json:"multilingual"`
-	Container    string   `json:"container"`
-	MimeType     string   `json:"mimetype"`
+	Type    Type   `json:"type"`
+	Title   string `json:"title"`
+	Episode int    `json:"episode"`
+	Season  int    `json:"season"`
+	// Seasons lists the sorted, unique seasons in explicit multi-season ranges.
+	// It is nil for movies, episodes, and single-season releases; Season is
+	// still zero for multi-season collections.
+	Seasons      []int  `json:"seasons,omitempty"`
+	Year         int    `json:"year"`
+	ScreenSize   string `json:"screen_size"`
+	ReleaseGroup string `json:"release_group"`
+	AudioCodec   string `json:"audio_codec"`
+	VideoCodec   string `json:"video_codec"`
+	// Languages contains explicit audio or subtitle language tags, in encounter
+	// order without duplicates. It does not identify audio-track languages.
+	Languages []string `json:"languages"`
+	// Multilingual reports multiple distinct languages or a generic multi/dual
+	// marker, including subtitle markers. It does not imply multiple audio tracks.
+	Multilingual bool   `json:"multilingual"`
+	Container    string `json:"container"`
+	MimeType     string `json:"mimetype"`
 }
 
 // File parses a file or extensionless release name and returns structured

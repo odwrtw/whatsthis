@@ -1,6 +1,9 @@
 package whatsthis
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestNumberingDoesNotConsumeMovieMetadata(t *testing.T) {
 	for _, input := range []string{
@@ -119,6 +122,15 @@ func TestMovieTitleWithLeadingMetadataBrackets(t *testing.T) {
 	}
 }
 
+func TestNumericSeriesTitleWithLeadingTags(t *testing.T) {
+	input := "[GROUP] 1923.S02E03.1080p.x264-GROUP.mkv"
+	want := Info{Type: Episode, Title: "1923", Season: 2, Episode: 3,
+		ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "GROUP", Container: "mkv", MimeType: "video/x-matroska"}
+	if got := File(input); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got: %+v\nwant: %+v", got, want)
+	}
+}
+
 func TestVideoSeasonEpisodeShorthand(t *testing.T) {
 	// File reserves the ambiguous S4-11 shape for a collection; Video can
 	// interpret it as an episode when the caller knows it is a video name.
@@ -128,11 +140,59 @@ func TestVideoSeasonEpisodeShorthand(t *testing.T) {
 	}
 }
 
+func TestTechnicalMetadataDoesNotBecomeNumbering(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  Info
+	}{
+		{
+			"Movie.2024.1080p.x264.[S01-S04]",
+			Info{Type: Movie, Title: "Movie", Year: 2024, ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "S01-S04"},
+		},
+		{
+			"Movie.2024.1080p.x264-E03.mkv",
+			Info{Type: Movie, Title: "Movie", Year: 2024, ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "E03", Container: "mkv", MimeType: "video/x-matroska"},
+		},
+		{
+			"[GROUP] Movie.1080p.x264.720.mkv",
+			Info{Type: Movie, Title: "Movie", ScreenSize: "720p", VideoCodec: "H.264", Container: "mkv", MimeType: "video/x-matroska"},
+		},
+		{
+			"Movie.1080i-GROUP.mkv",
+			Info{Type: Movie, Title: "Movie", ScreenSize: "1080i", ReleaseGroup: "GROUP", Container: "mkv", MimeType: "video/x-matroska"},
+		},
+		{
+			"Show.S01.1440.WEB.x264",
+			Info{Type: ShowSeason, Title: "Show", Season: 1, ScreenSize: "1440p", VideoCodec: "H.264"},
+		},
+	} {
+		t.Run(test.input, func(t *testing.T) {
+			if got := File(test.input); !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("got: %+v\nwant: %+v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestUnderscoreSeasonPacks(t *testing.T) {
+	for _, marker := range []string{"S01", "Season_1", "1st_Season", "S01E01-08", "S01_Season_1"} {
+		input := "Show_" + marker + "_1080p_x264-[my_group]"
+		t.Run(input, func(t *testing.T) {
+			want := Info{Type: ShowSeason, Title: "Show", Season: 1, ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "my_group"}
+			if got := File(input); !reflect.DeepEqual(got, want) {
+				t.Fatalf("got: %+v\nwant: %+v", got, want)
+			}
+		})
+	}
+}
+
 func FuzzFile(f *testing.F) {
 	for _, input := range []string{
 		"", "\xff", "Show。S01E01.1080p.x264-GROUP.mkv",
 		"Show_S2025E1056_1080i_x264.mkv", "[Group] Show - 1001 [1080p].mkv",
 		"Movie.2024.[1080p].[x264].[E-AC3-S78].mkv", "Show.S01-S04.1080p.x264",
+		"Show_S00-S03_Season_0-3_1080p_x264", "Show.S07-S08.S02-S03",
+		"Show.S999-S000", "Show.S000-S999", "[ENG] Show.S02E03.VOSTFR.WEB-DL.DL",
 	} {
 		f.Add(input)
 	}
@@ -140,6 +200,18 @@ func FuzzFile(f *testing.F) {
 		for _, got := range []Info{File(input), Video(input)} {
 			if got.Season < 0 || got.Episode < 0 || got.Year < 0 {
 				t.Fatalf("negative metadata: %+v", got)
+			}
+			if got.Type == Show {
+				if len(got.Seasons) < 2 || got.Season != 0 || got.Episode != 0 {
+					t.Fatalf("invalid collection metadata: %+v", got)
+				}
+				for i, season := range got.Seasons {
+					if season < 0 || i > 0 && season <= got.Seasons[i-1] {
+						t.Fatalf("invalid season list: %+v", got)
+					}
+				}
+			} else if got.Seasons != nil {
+				t.Fatalf("season list on a non-collection: %+v", got)
 			}
 			switch got.Type {
 			case Movie, Episode, ShowSeason, Show:

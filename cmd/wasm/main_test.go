@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"reflect"
 	"syscall/js"
 	"testing"
 
@@ -42,6 +43,25 @@ func TestVideo(t *testing.T) {
 	}
 	if got.Title != "Big Buck Bunny" || got.Year != 2008 || got.ReleaseGroup != "YIFY" {
 		t.Fatalf("video returned unexpected metadata: %+v", got)
+	}
+}
+
+func TestFileCollectionMetadata(t *testing.T) {
+	encoded, ok := file(js.Undefined(), []js.Value{
+		js.ValueOf("Example.S02-S04.FR.EN.1080p.x264-GROUP"),
+	}).(string)
+	if !ok {
+		t.Fatal("file did not return a string")
+	}
+	var got whatsthis.Info
+	if err := json.Unmarshal([]byte(encoded), &got); err != nil {
+		t.Fatalf("file returned invalid JSON: %v", err)
+	}
+	want := whatsthis.Info{Type: whatsthis.Show, Title: "Example", Seasons: []int{2, 3, 4},
+		Languages: []string{"French", "English"}, Multilingual: true,
+		ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "GROUP"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got: %+v\nwant: %+v", got, want)
 	}
 }
 
