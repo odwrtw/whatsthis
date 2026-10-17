@@ -30,9 +30,12 @@ type Info struct {
 	// Seasons lists the sorted, unique seasons in explicit multi-season ranges.
 	// It is nil for movies, episodes, and single-season releases; Season is
 	// still zero for multi-season collections.
-	Seasons      []int  `json:"seasons,omitempty"`
-	Year         int    `json:"year"`
-	ScreenSize   string `json:"screen_size"`
+	Seasons    []int  `json:"seasons,omitempty"`
+	Year       int    `json:"year"`
+	ScreenSize string `json:"screen_size"`
+	// ReleaseGroup is one primary attribution: an explicit trailing credit,
+	// a leading bracket group, or a contextual fallback, excluding recognizable
+	// websites, checksums and metadata. Unknown attribution roles are ambiguous.
 	ReleaseGroup string `json:"release_group"`
 	AudioCodec   string `json:"audio_codec"`
 	VideoCodec   string `json:"video_codec"`

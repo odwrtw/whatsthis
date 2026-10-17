@@ -70,10 +70,8 @@ func TestGuessTvShows(t *testing.T) {
 
 func TestGuessUnderscoreDelimitedEpisode(t *testing.T) {
 	name := "Journey_to_the_Stars_DVDrip_S04E08_An_Evening_With_Alex.mp4"
-	got := File(name)
-	if got.Type != Episode || got.Title != "Journey to the Stars" || got.Season != 4 || got.Episode != 8 {
-		t.Fatalf("File(%q) = %+v, want Journey to the Stars S04E08", name, got)
-	}
+	assertVideoInfo(t, name, Info{Type: Episode, Title: "Journey to the Stars", Season: 4, Episode: 8,
+		Container: "mp4", MimeType: "video/mp4"})
 }
 
 func TestGuessEpisodeTitleBoundary(t *testing.T) {
@@ -198,10 +196,9 @@ func TestGuessVP9Codec(t *testing.T) {
 
 func TestGuessUnderscoreCodecTag(t *testing.T) {
 	name := "[A.B.C.alphaSub&Beta&Gamma-Studio] Example's Grand Adventure - Silver Travelers [01][Ma10p_1080p][x265_flac].mkv"
-	got := File(name)
-	if got.VideoCodec != "H.265" || got.ReleaseGroup == "x265_flac" {
-		t.Fatalf("File(%q) = %+v, want H.265 and no codec tag as release group", name, got)
-	}
+	assertVideoInfo(t, name, Info{Type: Episode, Title: "Example's Grand Adventure Silver Travelers", Episode: 1,
+		ScreenSize: "1080p", VideoCodec: "H.265", AudioCodec: "FLAC", ReleaseGroup: "A.B.C.alphaSub&Beta&Gamma-Studio",
+		Container: "mkv", MimeType: "video/x-matroska"})
 }
 
 func TestGuessWebDownloadRipMetadata(t *testing.T) {
@@ -218,10 +215,8 @@ func TestGuessWebDownloadRipMetadata(t *testing.T) {
 
 func TestGuessPixelDimensionsResolution(t *testing.T) {
 	name := "[ExampleGroup]_The_Journey_of_Alex_Morgan_(1920x1080_Blu-ray_FLAC)_[123ABC45].mkv"
-	got := File(name)
-	if got.ScreenSize != "1080p" {
-		t.Fatalf("File(%q) = %+v, want 1080p", name, got)
-	}
+	assertVideoInfo(t, name, Info{Type: Movie, Title: "The Journey of Alex Morgan", ScreenSize: "1080p", AudioCodec: "FLAC",
+		ReleaseGroup: "ExampleGroup", Container: "mkv", MimeType: "video/x-matroska"})
 }
 
 func TestGuess4KResolution(t *testing.T) {

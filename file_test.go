@@ -212,8 +212,9 @@ func TestFileRepeatedSeasonRanges(t *testing.T) {
 func TestFileSeasonPackWithWebsiteSuffix(t *testing.T) {
 	name := "Example.Show.s01.HD720p.WEBRip.Rus.ExampleSite.tv"
 	got := File(name)
-	if got.Type != ShowSeason || got.Title != "Example Show" || got.Season != 1 {
-		t.Fatalf("File(%q) = %+v, want a season 1 pack for Example Show", name, got)
+	want := Info{Type: ShowSeason, Title: "Example Show", Season: 1, ScreenSize: "720p", Languages: []string{"Russian"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("File(%q) = %+v, want %+v", name, got, want)
 	}
 }
 
