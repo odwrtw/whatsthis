@@ -46,6 +46,8 @@ fmt.Println(info.Season)  // 0
 
 `Languages` combines explicit audio and subtitle language tags (for example, `FRENCH`, `ENG`, uppercase `FR`, `VOSTFR`, and `SweSub`), normalized to English names in encounter order without duplicates. `Multilingual` indicates multiple distinct languages or a generic `MULTi`, `Multiple Subtitle`, `DUAL`, or `DL` marker; `WEB-DL` alone does not set it. These fields do **not** establish which audio tracks are present, and unspecified languages are not inferred.
 
+See [parsing policies and limitations](LIMITATIONS.md) for supported conventions and ambiguity handling.
+
 ## WebAssembly demo
 
 The static web interface runs `whatsthis.File` entirely in the browser; names are not uploaded anywhere.

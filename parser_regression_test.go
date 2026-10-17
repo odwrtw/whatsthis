@@ -155,7 +155,7 @@ func TestTechnicalMetadataDoesNotBecomeNumbering(t *testing.T) {
 		},
 		{
 			"[GROUP] Movie.1080p.x264.720.mkv",
-			Info{Type: Movie, Title: "Movie", ScreenSize: "720p", VideoCodec: "H.264", Container: "mkv", MimeType: "video/x-matroska"},
+			Info{Type: Movie, Title: "Movie", ScreenSize: "720p", VideoCodec: "H.264", ReleaseGroup: "GROUP", Container: "mkv", MimeType: "video/x-matroska"},
 		},
 		{
 			"Movie.1080i-GROUP.mkv",
@@ -193,6 +193,14 @@ func FuzzFile(f *testing.F) {
 		"Movie.2024.[1080p].[x264].[E-AC3-S78].mkv", "Show.S01-S04.1080p.x264",
 		"Show_S00-S03_Season_0-3_1080p_x264", "Show.S07-S08.S02-S03",
 		"Show.S999-S000", "Show.S000-S999", "[ENG] Show.S02E03.VOSTFR.WEB-DL.DL",
+		"[GROUP] Movie.Part.2.2024.m720p.QAACx2.x265[A1B2C3D4].mkv",
+		"Show.S02E03 - Internal Affairs (1080p x264-GROUP[example.com]).mkv",
+		"[LEAD] Show.S02E03-TRAIL.mkv", "Movie.2024.03.18.x264-GROUP.mkv",
+		"Movie.2024.x264-GRP.EX.AAC.mkv", "Show.S02.1080p.x264-S56",
+		"[335] Show [01][720p][x265].mkv", "[GROUP] Show (Season 02) [1080p]",
+		"Show.S02E03.E-Subs.E-Subs.AAC", "Movie.2024.x264-[example.com/path].mkv",
+		"Movie.2024.x264-ȺȺȺȺȺȺȺȺȺȺ.mkv-note.mkv", "Example.E-Subs.720p.x264.mkv",
+		"Movie.2024.x264-GROUP[EXAMPLE.PL].mkv", "Movie.2024.x264-GROUP.mkv-ENG.mkv",
 	} {
 		f.Add(input)
 	}

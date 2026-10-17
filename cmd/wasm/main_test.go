@@ -65,6 +65,42 @@ func TestFileCollectionMetadata(t *testing.T) {
 	}
 }
 
+func TestSemanticMetadataRoundTrip(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  whatsthis.Info
+	}{
+		{
+			"Pilot.Worthy.-.The.Wild.Turn.2025.1080p.x264.AAC-GROUP[example.com].mkv",
+			whatsthis.Info{Type: whatsthis.Movie, Title: "Pilot Worthy The Wild Turn", Year: 2025, ScreenSize: "1080p", VideoCodec: "H.264", AudioCodec: "AAC", ReleaseGroup: "GROUP", Container: "mkv", MimeType: "video/x-matroska"},
+		},
+		{
+			"[ExampleTeam] Show [01][720p][x265][A1B2C3D4].mkv",
+			whatsthis.Info{Type: whatsthis.Episode, Title: "Show", Episode: 1, ScreenSize: "720p", VideoCodec: "H.265", ReleaseGroup: "ExampleTeam", Container: "mkv", MimeType: "video/x-matroska"},
+		},
+		{
+			"Example.2024.PERSIAN.m720p.x264.DDP5-GROUP.mkv",
+			whatsthis.Info{Type: whatsthis.Movie, Title: "Example", Year: 2024, ScreenSize: "720p", VideoCodec: "H.264", AudioCodec: "Dolby Digital Plus", ReleaseGroup: "GROUP", Languages: []string{"Persian"}, Container: "mkv", MimeType: "video/x-matroska"},
+		},
+	} {
+		for name, parse := range map[string]func(js.Value, []js.Value) any{"file": file, "video": video} {
+			t.Run(name+"/"+test.input, func(t *testing.T) {
+				encoded, ok := parse(js.Undefined(), []js.Value{js.ValueOf(test.input)}).(string)
+				if !ok {
+					t.Fatal("parser did not return a JSON string")
+				}
+				want, err := json.Marshal(test.want)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if encoded != string(want) {
+					t.Fatalf("got %s\nwant %s", encoded, want)
+				}
+			})
+		}
+	}
+}
+
 func TestFileRejectsInvalidArguments(t *testing.T) {
 	if got := file(js.Undefined(), nil); got != "" {
 		t.Fatalf("file with no arguments returned %#v", got)

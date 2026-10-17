@@ -33,7 +33,7 @@ var (
 	reEpisodeOnly        = regexp.MustCompile(`(?i)\b(?:Episodes?|Ep|E|Cap(?:itulo)?)[\s.#-]*(\d{1,4})(?:v\d+)?(?:$|[^A-Za-z0-9])`)
 	reAbsoluteEpisode    = regexp.MustCompile(`(?i)(?:^|[\s.])-[\s.]+(\d{1,4})(?:[ab])?(?:v\d+)?(?:$|[\s.(\[])`)
 	reLeadingEpisode     = regexp.MustCompile(`^(\d{2,3})[\s.-]+`)
-	reAnimeEpisode       = regexp.MustCompile(`(?i)(?:^|[\s.])(\d{2,4})(?:v\d+)?(?:$|[\s.(\[])`)
+	reAnimeEpisode       = regexp.MustCompile(`(?i)(?:^|[\s.(\[])(\d{2,4})(?:v\d+)?(?:$|[\s.()\[\]])`)
 	reEpisodeAfterSeason = regexp.MustCompile(`^[\s.()\[\]-]*(\d{1,4})(?:$|[\s.(\[])`)
 
 	// Compact episode: 3-4 digits where first 1-2 are season, last 2 are episode.
@@ -53,9 +53,9 @@ var screenSizeDimensions = map[string]string{
 	"3840x1632": "2160p",
 }
 
-// Screen size token patterns, with optional HD and progressive-scan markers.
+// Screen size token patterns, including compact m720p and 720pBrRip aliases.
 var (
-	reScreenSizeToken       = regexp.MustCompile(`(?i)^(?:HD)?(2160|1440|1080|720|540|480)([pi])$`)
+	reScreenSizeToken       = regexp.MustCompile(`(?i)^(?:HD|m)?(2160|1440|1080|720|540|480)([pi])(?:BrRip)?$`)
 	reScreenSizeNumberToken = regexp.MustCompile(`(?i)^(2160|1440|1080|720|540|480)$`)
 )
 
@@ -75,8 +75,8 @@ var (
 
 // Audio codec patterns.
 var (
-	// Dolby Digital Plus: DDP or DD+ followed by channel config.
-	reAudioDDP = regexp.MustCompile(`(?i)(?:\bDDP[\s.]?\d[\s.]?\d\b|\bDD\+[\s.]?\d[\s.]?\d\b)`)
+	// Dolby Digital Plus: DDP or DD+, optionally followed by full or partial channels.
+	reAudioDDP = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])(?:DDP|DD\+)(?:[\s.]?\d(?:[\s.]?\d)?)?(?:$|[^A-Za-z0-9])`)
 
 	// Dolby Digital (non-plus): DD followed by channel config, or AC3.
 	reAudioDD = regexp.MustCompile(`(?i)(?:\bDD[\s.]?\d[\s.]?\d\b|\bAC[\s.-]?3\b|\bDolbyD\b)`)
@@ -84,8 +84,8 @@ var (
 	// EAC3 (Enhanced AC-3, a.k.a. Dolby Digital Plus).
 	reAudioEAC3 = regexp.MustCompile(`(?i)\bE[\s.-]?AC[\s.-]?3\b`)
 
-	// AAC with optional channel config.
-	reAudioAAC = regexp.MustCompile(`(?i)\bAAC(?:[\s.]?\d[\s.]?\d)?\b`)
+	// AAC with optional channel config, or a QAAC encoder tag (e.g., QAACx2).
+	reAudioAAC = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])(?:AAC(?:[\s.]?\d[\s.]?\d)?|QAAC(?:x\d+)?)(?:$|[^A-Za-z0-9])`)
 
 	// DTS, FLAC, Opus, and Dolby TrueHD audio codecs.
 	reAudioDTS    = regexp.MustCompile(`(?i)\bDTS(?:[\s.-]?(?:HD|MA|ES))?\b`)
@@ -125,7 +125,7 @@ var knownMetadataTokens = map[string]bool{
 	"dd+5.1": true, "dd+2.0": true,
 	// Source / format keywords.
 	"hdtv": true, "pdtv": true, "webrip": true, "web-dl": true, "web-dlrip": true, "webdl": true,
-	"web": true, "web-rip": true,
+	"web": true, "web-rip": true, "web-dls": true,
 	"brrip": true, "bdrip": true, "bluray": true, "blu-ray": true, "dvdrip": true, "hdrip": true,
 	"e-subs": true, "esubs": true,
 	// Streaming services.
@@ -158,6 +158,7 @@ var releaseLanguageNames = map[string]string{
 	"rum": "Romanian", "ron": "Romanian", "bul": "Bulgarian", "hrv": "Croatian",
 	"srp": "Serbian", "slv": "Slovenian", "est": "Estonian", "lav": "Latvian",
 	"lit": "Lithuanian", "isl": "Icelandic",
+	"persian": "Persian", "esubs": "English",
 	"en": "English", "fr": "French", "de": "German", "it": "Italian",
 	"es": "Spanish", "pt": "Portuguese", "pl": "Polish", "ru": "Russian", "uk": "Ukrainian",
 	"ja": "Japanese", "ko": "Korean", "zh": "Chinese", "hi": "Hindi",
@@ -173,13 +174,11 @@ var releaseLanguageNames = map[string]string{
 	"estonian": "Estonian", "latvian": "Latvian", "lithuanian": "Lithuanian", "icelandic": "Icelandic",
 }
 
-// Episode title separator: " - " after SxxExx indicates an episode title, not a release group.
-var reEpisodeTitleSep = regexp.MustCompile(`^\s*-\s+`)
-
 // compoundTokens lists hyphenated tokens that should NOT be split into
 // a release-group boundary (e.g., "WEB-DL" is a single metadata token).
 var compoundTokens = map[string]bool{
 	"web-dl":    true,
+	"web-dls":   true,
 	"web-dlrip": true,
 	"web-rip":   true,
 	"blu-ray":   true,
@@ -219,9 +218,6 @@ var (
 	reSeasonDescriptorBracket = regexp.MustCompile(`(?i)\[\s*(?:S\d{1,3}|Season[\s._-]*\d{1,3})\b[^\]]*\]`)
 	reFileSizeBracket         = regexp.MustCompile(`(?i)\[\s*\d+(?:\.\d+)?\s*(?:KB|MB|GB|TB)\s*\]`)
 	reContainerBracket        = regexp.MustCompile(`(?i)\[\s*(?:MP4|MKV|AVI|WEBM|MOV|M4V|TS|WMV|FLV)\s*\]`)
-
-	// Matches a "Part N" suffix (roman or arabic numerals).
-	rePartSuffix = regexp.MustCompile(`(?i)\s+part\s+[0-9ivx]+$`)
 
 	// Matches bracket tags in titles, e.g., "[720p]".
 	reBracketTag = regexp.MustCompile(`(?:^|[\s._-])\[[^\]]+\]`)

@@ -26,7 +26,7 @@ func parse(input string) Info {
 	g.Type = Episode
 
 	// Step 1: Extract container and handle double extensions.
-	name, container, doubleExtBracket := extractContainer(input)
+	name, container := extractContainer(input)
 	g.Container = container
 	g.MimeType = containerMIME[container]
 
@@ -52,13 +52,22 @@ func parse(input string) Info {
 	// Step 4: Extract type-specific fields.
 	if g.Type == Episode {
 		titleRegion = reEpisodeSourceSuffix.ReplaceAllString(titleRegion, "")
-		// Handle " - Episode Title" and pure episode title patterns.
-		metaRegion = stripEpisodeTitle(metaRegion)
-		g.Languages, g.Multilingual = extractLanguages(leadingBracketTags(name) + " " + metaRegion)
-
-		g.ReleaseGroup, metaRegion = extractReleaseGroup(metaRegion, doubleExtBracket)
-		g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
 		g.Year, titleRegion = extractTitleYear(titleRegion)
+		if g.Year == 0 {
+			if start := episodeMetadataStart(metaRegion); start >= 0 {
+				// Keep a year annotation before technical tags, including one in
+				// an alternate episode title, before discarding title text.
+				g.Year, _ = extractYear(metaRegion[:start])
+			} else if isEpisodeMetadataOnly(metaRegion) {
+				// Standalone years need no technical anchor. Read them before
+				// bracket/annotation stripping, but not from episode-title words.
+				g.Year, _ = extractYear(metaRegion)
+			}
+		}
+		// Handle " - Episode Title" and pure episode title patterns.
+		metaRegion = leadingTechnicalTags(name) + " " + stripEpisodeTitle(metaRegion)
+		g.ReleaseGroup, metaRegion = primaryReleaseGroup(name, metaRegion)
+		g.Languages, g.Multilingual = extractLanguages(leadingBracketTags(name) + " " + metaRegion)
 
 		// If no year was found in the title region, allow year immediately after SxxExx.
 		if g.Year == 0 {
@@ -70,21 +79,14 @@ func parse(input string) Info {
 		g.AudioCodec = extractAudioCodec(metaRegion)
 		g.Title = extractTitle(titleRegion, seStart, seEnd, name)
 	} else {
-		prefixGroup, cleanedTitleRegion := extractMoviePrefixGroup(titleRegion)
-		titleRegion = cleanedTitleRegion
-
+		metaRegion = leadingTechnicalTags(name) + " " + metaRegion
 		g.Year, metaRegion = extractYear(metaRegion)
+		g.ReleaseGroup, metaRegion = primaryReleaseGroup(name, metaRegion)
 		g.Languages, g.Multilingual = extractLanguages(leadingBracketTags(name) + " " + metaRegion)
-		g.ReleaseGroup, metaRegion = extractReleaseGroup(metaRegion, doubleExtBracket)
-		g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
-		if prefixGroup != "" {
-			g.ReleaseGroup = prefixGroup
-		}
-
 		g.ScreenSize = extractScreenSize(metaRegion)
 		g.VideoCodec = extractVideoCodec(metaRegion)
 		g.AudioCodec = extractAudioCodec(metaRegion)
-		g.Title = cleanMovieTitle(titleRegion)
+		g.Title = cleanMovieTitle(stripPresentationSuffix(titleRegion, metaRegion))
 	}
 
 	return g
@@ -133,24 +135,17 @@ func parseSeasonName(name string) (Info, bool) {
 	metaRegion = reFileSizeBracket.ReplaceAllString(metaRegion, " ")
 	metaRegion = reContainerBracket.ReplaceAllString(metaRegion, " ")
 
-	explicitGroup, metaRegion := normalizeSeasonMeta(metaRegion)
-
 	g.Year, titleRegion = extractTitleYear(titleRegion)
 	if g.Year == 0 {
 		g.Year, metaRegion = extractYear(metaRegion)
 	}
+	metaRegion = leadingTechnicalTags(name) + " " + metaRegion
+	g.ReleaseGroup, metaRegion = primaryReleaseGroup(name, metaRegion)
 	g.Languages, g.Multilingual = extractLanguages(leadingBracketTags(name) + " " + metaRegion)
-
-	if explicitGroup != "" {
-		g.ReleaseGroup = explicitGroup
-	} else {
-		g.ReleaseGroup, metaRegion = extractSeasonReleaseGroup(metaRegion)
-	}
-	g.ReleaseGroup = formatReleaseGroup(g.ReleaseGroup)
 	g.ScreenSize = extractScreenSize(metaRegion)
 	g.VideoCodec = extractVideoCodec(metaRegion)
 	g.AudioCodec = extractAudioCodec(metaRegion)
-	g.Title = extractTitle(titleRegion, markerStart, markerEnd, name)
+	g.Title = strings.TrimSuffix(extractTitle(titleRegion, markerStart, markerEnd, name), ":")
 
 	return g, true
 }
@@ -196,6 +191,9 @@ func extractSeasonName(name string) (season, start, end int, ok bool) {
 	var markers []seasonNameMarker
 
 	for _, m := range reSeasonEpisodeRange.FindAllStringSubmatchIndex(name, -1) {
+		if hasPrecedingMetadata(name[:m[0]]) {
+			continue
+		}
 		seasonNumber, _ := strconv.Atoi(name[m[2]:m[3]])
 		firstEpisode, _ := strconv.Atoi(name[m[4]:m[5]])
 		lastEpisode, _ := strconv.Atoi(name[m[6]:m[7]])
@@ -206,6 +204,9 @@ func extractSeasonName(name string) (season, start, end int, ok bool) {
 
 	for _, re := range []*regexp.Regexp{reSeasonOnly, reSeasonWordOnly, reSeasonOrdinal} {
 		for _, m := range re.FindAllStringSubmatchIndex(name, -1) {
+			if hasPrecedingMetadata(name[:m[0]]) {
+				continue
+			}
 			seasonNumber, _ := strconv.Atoi(name[m[2]:m[3]])
 			markers = append(markers, seasonNameMarker{seasonNumber, m[0], m[1]})
 		}
@@ -239,29 +240,12 @@ func stripSeasonNameMarkers(meta string) string {
 		matches := re.FindAllStringIndex(strings.ReplaceAll(meta, "_", " "), -1)
 		for i := len(matches) - 1; i >= 0; i-- {
 			m := matches[i]
-			meta = meta[:m[0]] + " " + meta[m[1]:]
+			if re == reSeasonDescriptorBracket || !hasPrecedingMetadata(meta[:m[0]]) {
+				meta = meta[:m[0]] + " " + meta[m[1]:]
+			}
 		}
 	}
 	return meta
-}
-
-// normalizeSeasonMeta removes punctuation around a season marker. A leading
-// hyphen with no metadata after it denotes an explicit release group.
-func normalizeSeasonMeta(meta string) (explicitGroup, remaining string) {
-	trimmed := strings.TrimSpace(meta)
-	if strings.HasPrefix(trimmed, "-") {
-		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
-		if !hasMetadataTokens(strings.NewReplacer("[", " ", "]", " ").Replace(trimmed)) &&
-			!isSeasonMetadataBracket(strings.Trim(trimmed, "[]")) {
-			return cleanReleaseGroup(trimmed), ""
-		}
-	}
-
-	if strings.HasPrefix(trimmed, "(") && strings.HasSuffix(trimmed, ")") {
-		trimmed = strings.TrimSpace(trimmed[1 : len(trimmed)-1])
-	}
-
-	return "", trimmed
 }
 
 // isSeasonMetadataBracket reports whether bracket content contains metadata
@@ -270,32 +254,12 @@ func isSeasonMetadataBracket(content string) bool {
 	return hasMetadataTokens(content) || extractAudioCodec(content) != ""
 }
 
-// extractSeasonReleaseGroup treats a final bracket as the release group unless
-// it contains known metadata (e.g., [1080p] or [x265]).
-func extractSeasonReleaseGroup(meta string) (group, remaining string) {
-	trimmed := strings.TrimSpace(meta)
-	if strings.HasSuffix(trimmed, "]") {
-		if start := strings.LastIndex(trimmed, "["); start >= 0 {
-			group = strings.TrimSpace(trimmed[start+1 : len(trimmed)-1])
-			if isSeasonMetadataBracket(group) {
-				priorGroup, before := extractSeasonReleaseGroup(trimmed[:start])
-				return priorGroup, strings.TrimSpace(before + " " + trimmed[start:])
-			}
-			if group != "" {
-				return group, strings.TrimSpace(trimmed[:start])
-			}
-		}
-	}
-	return extractReleaseGroup(meta, "")
-}
-
-// extractContainer extracts the file extension/container from the filename.
-// Returns the name without extension, the container, and any bracket content
-// from a double-extension pattern (e.g., "file.mkv[novarelay].mkv").
-func extractContainer(input string) (name, container, doubleExtBracket string) {
+// extractContainer returns the name without extension and the outer container.
+// It also strips the inner extension and bracket in "file.mkv[tag].mkv".
+func extractContainer(input string) (name, container string) {
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(input), "."))
 	if _, ok := containerMIME[ext]; !ok {
-		return input, "", ""
+		return input, ""
 	}
 
 	name = strings.TrimSuffix(input, filepath.Ext(input))
@@ -304,7 +268,6 @@ func extractContainer(input string) (name, container, doubleExtBracket string) {
 	if m := reDoubleExt.FindStringSubmatch(input); m != nil {
 		innerExt := strings.ToLower(m[1])
 		if _, ok := containerMIME[innerExt]; ok {
-			doubleExtBracket = m[2]
 			// Strip the inner ".ext[bracket]" from name.
 			// name is currently "file.mkv[tag]", remove the "[tag]" and ".mkv".
 			bracketStart := strings.LastIndex(name, "[")
@@ -318,7 +281,7 @@ func extractContainer(input string) (name, container, doubleExtBracket string) {
 		}
 	}
 
-	return name, ext, doubleExtBracket
+	return name, ext
 }
 
 // extractSeasonEpisode extracts season and episode numbers.
@@ -416,6 +379,25 @@ func extractSeasonEpisode(name string) (season, episode, start, end int) {
 	// season/episode split (One Piece 1098 is episode 1098, not S10E98).
 	if strings.HasPrefix(name, "[") {
 		for _, m := range reAnimeEpisode.FindAllStringSubmatchIndex(name, -1) {
+			if seasonStart >= 0 && m[2] >= seasonStart && m[3] <= seasonEnd {
+				continue
+			}
+			// A numeric leading tag ([335]) is not an episode anchor. A
+			// bracketed number after actual title text ([01]) can be one.
+			prefix := strings.TrimRight(name[:m[2]], " ._([")
+			if strings.Trim(stripBracketTags(prefix), " ._-") == "" {
+				continue
+			}
+			// Enclosed resolution numbers are metadata, even without a season.
+			// Bare numbers and explicit episode markers retain their meaning.
+			before := strings.TrimRight(name[:m[2]], " \t")
+			after := strings.TrimLeft(name[m[3]:], " \t")
+			enclosed := len(before) > 0 && len(after) > 0 &&
+				(before[len(before)-1] == '[' && after[0] == ']' || before[len(before)-1] == '(' && after[0] == ')')
+			if enclosed && reScreenSizeNumberToken.MatchString(name[m[2]:m[3]]) {
+				// Do not let the compact-number fallback reinterpret it either.
+				return 0, 0, -1, -1
+			}
 			if hasPrecedingMetadata(name[:m[2]]) || seasonStart >= 0 && reScreenSizeNumberToken.MatchString(name[m[2]:m[3]]) {
 				continue
 			}
@@ -480,49 +462,28 @@ func findSeasonMarker(name string) (season, start, end int) {
 //
 // Returns the metadata region with episode title text removed.
 func stripEpisodeTitle(meta string) string {
-	// Pattern 1: " - Episode Title" separator.
-	if reEpisodeTitleSep.MatchString(meta) {
-		afterSep := reEpisodeTitleSep.ReplaceAllString(meta, "")
-
-		// If there's parenthetical metadata, extract that.
-		// e.g., " - Where I Come From (1080p WEB-DL x265 SAMPA)"
-		if parenIdx := strings.Index(afterSep, "("); parenIdx >= 0 {
-			parenContent := afterSep[parenIdx+1:]
-			if closeIdx := strings.LastIndex(parenContent, ")"); closeIdx >= 0 {
-				parenContent = parenContent[:closeIdx]
-			}
-			if hasMetadataTokens(parenContent) {
-				return " " + parenContent
-			}
+	meta = normalizeSubtitleAliases(meta)
+	start := episodeMetadataStart(meta)
+	if start < 0 {
+		// Weak words alone (e.g., "Real French") are not metadata. Bare
+		// resolutions or years can anchor an otherwise metadata-only suffix.
+		if isEpisodeMetadataOnly(meta) && (extractScreenSize(meta) != "" || reYear.MatchString(meta)) {
+			return meta
 		}
-
-		// Pure episode title (no metadata tokens) -> strip entirely.
-		if !hasMetadataTokens(afterSep) {
-			return ""
+		// A compact -GROUP suffix is an explicit credit even without
+		// technical tags. A spaced " - Episode Title" is not.
+		compact := strings.Trim(meta, "._")
+		if strings.HasPrefix(compact, "-") && !strings.ContainsAny(compact, " \t") && credibleReleaseGroup(compact[1:]) {
+			return meta
 		}
-
-		return meta
-	}
-
-	// Pattern 2: Space-separated episode title with no metadata tokens.
-	// e.g., " Where the Road Goes" or " Socalyalcon VI"
-	// Only applies when there are NO dots in the meta region (space-separated filenames).
-	trimmed := strings.TrimSpace(meta)
-	if trimmed == "" {
-		return meta
-	}
-
-	// Check for hashtag directly after SxxExx (e.g., "S03E02-#slipperyslope").
-	if strings.HasPrefix(trimmed, "-#") || strings.HasPrefix(trimmed, "#") {
 		return ""
 	}
-
-	// Only trigger for space-separated content without dots.
-	if !strings.Contains(trimmed, ".") && !hasMetadataTokens(meta) {
-		return ""
+	if isEpisodeMetadataOnly(stripBracketTags(meta[:start])) {
+		return meta
 	}
-
-	return meta
+	// Keep explicit bracket attributions before the technical boundary, but
+	// discard ordinary episode-title words and their incidental numbers.
+	return strings.Join(reBracketTag.FindAllString(meta[:start], -1), " ") + " " + meta[start:]
 }
 
 // hasMetadataTokens checks if a string contains any known metadata tokens.
@@ -533,7 +494,7 @@ func hasMetadataTokens(s string) bool {
 	lower := strings.ToLower(s)
 	tokens := strings.FieldsFunc(lower, isMetaSep)
 	for _, tok := range tokens {
-		if knownMetadataTokens[tok] {
+		if knownMetadataTokens[tok] || isPresentationToken(tok) {
 			return true
 		}
 		if releaseLanguageName(tok) != "" || reScreenSizeToken.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
@@ -562,147 +523,6 @@ func hasPrecedingMetadata(s string) bool {
 		s = strings.TrimLeft(s[end+1:], " ._-")
 	}
 	return hasTechnicalMetadata(s)
-}
-
-// extractReleaseGroup extracts the release group from the metadata region.
-func extractReleaseGroup(meta, doubleExtBracket string) (group, remaining string) {
-	if meta == "" && doubleExtBracket == "" {
-		return "", meta
-	}
-
-	// If we have a double-extension bracket (e.g., from "file.mkv[novarelay].mkv"),
-	// that bracket IS the release group.
-	if doubleExtBracket != "" {
-		return strings.TrimSpace(strings.Trim(doubleExtBracket, "[]")), meta
-	}
-
-	if meta == "" {
-		return "", meta
-	}
-
-	// Strategy 1: Look for bracket release group [GROUP].
-	if idx := strings.LastIndex(meta, "["); idx >= 0 {
-		endIdx := strings.Index(meta[idx:], "]")
-		if endIdx >= 0 {
-			bracketContent := strings.TrimSpace(meta[idx+1 : idx+endIdx])
-			hadDotBeforeBracket := idx > 0 && meta[idx-1] == '.'
-			beforeBracket := strings.TrimRight(meta[:idx], ". ")
-
-			if groupSep := strings.LastIndex(bracketContent, "-"); groupSep > 0 {
-				bracketMeta := strings.TrimSpace(bracketContent[:groupSep])
-				bracketGroup := strings.TrimSpace(bracketContent[groupSep+1:])
-				if bracketMeta != "" && bracketGroup != "" && hasMetadataTokens(bracketMeta) && !hasMetadataTokens(bracketGroup) {
-					remaining := strings.TrimSpace(beforeBracket + " " + bracketMeta)
-					return cleanReleaseGroup(bracketGroup), remaining
-				}
-			}
-			if hasMetadataTokens(bracketContent) {
-				// Metadata brackets can precede a conventional trailing group.
-				// Parse that suffix without losing the bracket's metadata or order.
-				if tail := meta[idx+endIdx+1:]; strings.TrimSpace(tail) != "" {
-					if suffixGroup, suffixMeta := extractReleaseGroup(tail, ""); suffixGroup != "" && !strings.ContainsAny(suffixGroup, " ()") {
-						return suffixGroup, meta[:idx+endIdx+1] + suffixMeta
-					}
-				}
-				priorGroup, before := extractReleaseGroup(beforeBracket, "")
-				return priorGroup, strings.TrimSpace(before + " " + meta[idx:])
-			}
-
-			if strings.HasSuffix(beforeBracket, "-") {
-				return strings.Trim(bracketContent, "[]"), strings.TrimRight(strings.TrimSuffix(beforeBracket, "-"), ". ")
-			}
-
-			// Check if the token immediately before the bracket is an unknown token.
-			// If so, include it: "Will1869[novarelay.re]" -> "Will1869[novarelay.re]"
-			// But NOT if it's a known token: "x264[NOVARELAYx.to]" -> "NOVARELAYx.to"
-			lastTok := lastDotSeparatedToken(beforeBracket)
-			lastTokLower := strings.ToLower(lastTok)
-			includeLastToken := lastTok != "" && !isKnownToken(lastTokLower)
-
-			// Check if there's a hyphen-separated release group before the bracket.
-			if hyphenIdx := strings.LastIndex(beforeBracket, "-"); hyphenIdx >= 0 {
-				afterHyphen := strings.TrimSpace(beforeBracket[hyphenIdx+1:])
-				beforeHyphen := beforeBracket[:hyphenIdx]
-
-				if afterHyphen != "" && !isCompoundToken(beforeHyphen, afterHyphen) && !hasTechnicalMetadata(afterHyphen) {
-					// The part after the hyphen + bracket is the release group.
-					// e.g., "-RARBG[novarelay.re]" -> "RARBG[novarelay.re]"
-					group = strings.TrimSpace(strings.TrimRight(afterHyphen, ". ") + "[" + bracketContent + "]")
-					return group, strings.TrimRight(beforeHyphen, ". ")
-				}
-			}
-
-			// If bracket looks like a domain/source tag, prefer bracket only.
-			if isLikelyDomainTag(bracketContent) && (!containsDigit(lastTok) || isCodecNumberToken(lastTokLower)) {
-				return strings.Trim(bracketContent, "[]"), beforeBracket
-			}
-
-			if isCodecNumberToken(lastTokLower) {
-				return strings.Trim(bracketContent, "[]"), beforeBracket
-			}
-
-			if includeLastToken {
-				// Include the unknown token before the bracket.
-				// "noobless[UTR]" -> "noobless[UTR]"
-				tokenStart := strings.LastIndexAny(beforeBracket, ". ") + 1
-				tokenPart := beforeBracket[tokenStart:]
-				beforeToken := strings.TrimRight(beforeBracket[:tokenStart], ". ")
-				sep := "["
-				if hadDotBeforeBracket {
-					sep = ".["
-				}
-				group = strings.TrimSpace(tokenPart + sep + bracketContent + "]")
-				return group, beforeToken
-			}
-
-			// Just the bracket content.
-			return strings.Trim(bracketContent, "[]"), beforeBracket
-		}
-	}
-
-	// Strategy 2: Hyphen-separated release group.
-	if hyphenIdx := strings.LastIndex(meta, "-"); hyphenIdx >= 0 {
-		afterHyphen := strings.TrimRight(meta[hyphenIdx+1:], ". ")
-		beforeHyphen := meta[:hyphenIdx]
-
-		if !isCompoundToken(beforeHyphen, afterHyphen) && afterHyphen != "" && !hasTechnicalMetadata(afterHyphen) {
-			// Handle short numeric tail groups like "GCJM-0".
-			if len(afterHyphen) <= 2 {
-				prevHyphen := strings.LastIndex(beforeHyphen, "-")
-				if prevHyphen >= 0 {
-					prefix := strings.TrimRight(beforeHyphen[prevHyphen+1:], ". ")
-					if prefix != "" {
-						group = cleanReleaseGroup(prefix + "-" + afterHyphen)
-						return group, strings.TrimRight(beforeHyphen[:prevHyphen], ". ")
-					}
-				}
-			}
-
-			// Check if afterHyphen is empty or just a bracket.
-			if strings.HasPrefix(afterHyphen, "[") {
-				// "-[novarelay]" pattern.
-				content := strings.Trim(afterHyphen, "[]")
-				return content, strings.TrimRight(beforeHyphen, ". ")
-			}
-			group = cleanReleaseGroup(afterHyphen)
-			return group, strings.TrimRight(beforeHyphen, ". ")
-		}
-	}
-
-	// Strategy 3: Last unknown dot-separated token.
-	// Only for dot-separated metadata (NOT space-only episode titles).
-	if strings.Contains(meta, ".") {
-		group, remaining = extractTrailingUnknownToken(meta)
-		return group, remaining
-	}
-
-	// Strategy 4: Space-separated metadata ending with an unknown token.
-	if hasMetadataTokens(meta) {
-		group, remaining = extractTrailingUnknownToken(meta)
-		return group, remaining
-	}
-
-	return "", meta
 }
 
 // lastDotSeparatedToken returns the last token in a dot/space-separated string.
@@ -761,6 +581,7 @@ func releaseLanguageName(token string) string {
 // extractLanguages identifies generic multilingual markers and explicit
 // audio or subtitle language tags from the metadata region.
 func extractLanguages(meta string) ([]string, bool) {
+	meta = normalizeSubtitleAliases(meta)
 	var languages []string
 	seen := make(map[string]bool)
 	multilingual := false
@@ -806,7 +627,7 @@ func isKnownToken(tok string) bool {
 	if tok == "" {
 		return true
 	}
-	if knownMetadataTokens[tok] {
+	if knownMetadataTokens[tok] || isPresentationToken(tok) {
 		return true
 	}
 	if releaseLanguageName(tok) != "" {
@@ -861,19 +682,14 @@ func isCodecLetterInContext(tokens []string, i int) bool {
 	return next == "264" || next == "265"
 }
 
-func isCodecNumberToken(tok string) bool {
-	tok = strings.TrimSpace(strings.ToLower(tok))
-	return tok == "264" || tok == "265"
-}
-
 // isCompoundToken checks if a hyphen connects two parts of a compound token.
 func isCompoundToken(before, after string) bool {
-	lastToken := strings.ToLower(lastDotSeparatedToken(before))
+	lastToken := strings.ToLower(strings.Trim(lastDotSeparatedToken(before), "()[]"))
 	afterLower := strings.ToLower(strings.TrimRight(after, ". "))
 
-	// Get just the first word of afterLower for compound check.
+	// Underscores and bracket punctuation delimit source tags too.
 	afterFirstWord := afterLower
-	if idx := strings.IndexAny(afterLower, ". "); idx >= 0 {
+	if idx := strings.IndexAny(afterLower, ". _()[]"); idx >= 0 {
 		afterFirstWord = afterLower[:idx]
 	}
 
@@ -888,115 +704,6 @@ func cleanReleaseGroup(s string) string {
 	s = reParenDomainSuffix.ReplaceAllString(s, "")
 	s = strings.TrimSpace(strings.TrimRight(s, ". "))
 	return s
-}
-
-func formatReleaseGroup(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-
-	if strings.Contains(s, "[") {
-		s = strings.ReplaceAll(s, "][", "] [")
-		s = strings.TrimSpace(s)
-	}
-
-	if m := reTrailingParen.FindStringSubmatch(s); m != nil {
-		rawInside := strings.TrimSpace(m[1])
-		compactInside := strings.ToLower(strings.ReplaceAll(rawInside, " ", ""))
-		if isLikelyDomainTag(compactInside) {
-			base := strings.TrimSpace(strings.TrimRight(reTrailingParen.ReplaceAllString(s, ""), "."))
-			return base
-		}
-
-		hadLeadingSpace := strings.HasPrefix(m[1], " ") || strings.HasPrefix(m[1], ".")
-		inside := m[1]
-		inside = strings.ReplaceAll(inside, ".", " ")
-		inside = reSpaces.ReplaceAllString(inside, " ")
-		inside = strings.TrimSpace(inside)
-		if hadLeadingSpace {
-			inside = " " + inside
-		}
-		if inside != "" {
-			base := strings.TrimSpace(reTrailingParen.ReplaceAllString(s, ""))
-			base = strings.TrimSpace(strings.TrimRight(base, "."))
-			if base != "" {
-				return strings.TrimSpace(base + " (" + inside + ")")
-			}
-		}
-	}
-
-	return s
-}
-
-// extractTrailingUnknownToken finds an unknown token only if it appears after
-// the last known metadata token, preventing episode-title words from being
-// treated as release groups.
-func extractTrailingUnknownToken(meta string) (group, remaining string) {
-	sep := "."
-	if !strings.Contains(meta, ".") {
-		sep = " "
-		if strings.Contains(meta, "_") {
-			sep = "_"
-		}
-	}
-
-	tokens := strings.FieldsFunc(meta, isTokenSep)
-	if len(tokens) == 0 {
-		return "", meta
-	}
-
-	skipTokens := map[string]bool{"com": true, "esubs": true, "e": true}
-	if len(tokens) >= 2 && strings.EqualFold(tokens[len(tokens)-1], "com") {
-		skipTokens[strings.ToLower(tokens[len(tokens)-2])] = true
-	}
-
-	lastKnown := -1
-	for i, tok := range tokens {
-		lower := strings.ToLower(tok)
-		if skipTokens[lower] || isSkippableNumericToken(lower) || isKnownToken(lower) || isCodecNumberInContext(tokens, i) || isCodecLetterInContext(tokens, i) {
-			lastKnown = i
-		}
-	}
-
-	for i := len(tokens) - 1; i > lastKnown; i-- {
-		tok := tokens[i]
-		lower := strings.ToLower(tok)
-		if skipTokens[lower] || isSkippableNumericToken(lower) || isKnownToken(lower) || isCodecNumberInContext(tokens, i) || isCodecLetterInContext(tokens, i) {
-			continue
-		}
-		start := i
-		for j := i - 1; j > lastKnown; j-- {
-			jl := strings.ToLower(tokens[j])
-			if skipTokens[jl] || isSkippableNumericToken(jl) || isKnownToken(jl) || isCodecNumberInContext(tokens, j) || isCodecLetterInContext(tokens, j) {
-				break
-			}
-			start = j
-		}
-
-		before := tokens[:start]
-		after := tokens[i+1:]
-		parts := make([]string, 0, len(before)+len(after))
-		parts = append(parts, before...)
-		parts = append(parts, after...)
-		groupTokens := strings.Join(tokens[start:i+1], sep)
-		if isCodecNumberToken(strings.ToLower(strings.TrimSpace(groupTokens))) {
-			continue
-		}
-		return strings.TrimSpace(groupTokens), strings.Join(parts, sep)
-	}
-
-	return "", meta
-}
-
-// containsDigit reports whether s contains at least one digit.
-func containsDigit(s string) bool {
-	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			return true
-		}
-	}
-	return false
 }
 
 func isLikelyDomainTag(s string) bool {
@@ -1055,13 +762,15 @@ func splitMovieRegions(name string) (titleRegion, metaRegion string) {
 		return "", ""
 	}
 
-	name = stripWebsitePrefix(name)
+	// Normalize within this local string before computing title/meta offsets.
+	// E-Subs shrinks by one byte and must not reuse offsets into the input.
+	name = normalizeSubtitleAliases(stripWebsitePrefix(name))
 
 	if years := findYearMatches(name); len(years) > 0 {
 		last := years[len(years)-1]
 		if last.start == 0 {
 			after := strings.TrimLeft(name[last.end:], " ._-")
-			boundary := firstMetadataTokenIndex(after)
+			boundary := firstMetadataTokenIndex(after, true)
 			if after == "" || boundary == 0 {
 				return name[:last.end], after
 			}
@@ -1096,7 +805,7 @@ func splitMovieRegions(name string) (titleRegion, metaRegion string) {
 		return title, meta
 	}
 
-	if split := firstMetadataTokenIndex(name); split >= 0 {
+	if split := firstMetadataTokenIndex(name, true); split >= 0 {
 		title := strings.TrimRight(name[:split], " ._-")
 		meta := strings.TrimLeft(name[split:], " ._-")
 		return title, meta
@@ -1105,7 +814,9 @@ func splitMovieRegions(name string) (titleRegion, metaRegion string) {
 	return name, ""
 }
 
-func firstMetadataTokenIndex(s string) int {
+// inTitle preserves an unbracketed 3D until another metadata boundary is found.
+// Already-separated metadata (e.g., release credits) still recognizes 3D tags.
+func firstMetadataTokenIndex(s string, inTitle bool) int {
 	type tokenPos struct {
 		tok   string
 		start int
@@ -1146,6 +857,9 @@ func firstMetadataTokenIndex(s string) int {
 		if t.tok == "0" || t.tok == "1" {
 			continue
 		}
+		if inTitle && t.tok == "3d" && strings.LastIndexByte(s[:t.start], '[') <= strings.LastIndexByte(s[:t.start], ']') {
+			continue
+		}
 		language := releaseLanguageName(t.tok)
 		weakLanguage := language != "" && (len(t.tok) == 2 || strings.EqualFold(t.tok, language))
 		if weakLanguage {
@@ -1158,7 +872,7 @@ func firstMetadataTokenIndex(s string) int {
 			}
 		}
 		switch t.tok {
-		case "audio", "sub", "subs", "subtitle", "subtitles", "multiple":
+		case "audio", "sub", "subs", "subtitle", "subtitles", "multiple", "atmos", "dv", "remux", "commentary", "bd", "dvd":
 			if i == 0 || i+1 == len(tokens) || !isKnownToken(tokens[i+1].tok) {
 				continue
 			}
@@ -1168,62 +882,29 @@ func firstMetadataTokenIndex(s string) int {
 			}
 		}
 		if isKnownToken(t.tok) || isCodecLetterInContext(toks, i) || isCodecNumberInContext(toks, i) {
+			// A metadata block ends the title at its opening bracket, not
+			// halfway through [BD 1080p ...]. Leading tag blocks do not end
+			// a title that has not begun yet.
+			if open := strings.LastIndexByte(s[:t.start], '['); open > strings.LastIndexByte(s[:t.start], ']') {
+				if strings.Trim(stripBracketTags(s[:open]), " ._-") == "" {
+					continue
+				}
+				return open
+			}
 			return t.start
 		}
 	}
 	return -1
 }
 
-func extractMoviePrefixGroup(titleRegion string) (group, cleanedTitle string) {
-	cleaned := strings.TrimSpace(strings.TrimRight(titleRegion, "- "))
-
-	if hyphen := strings.Index(cleaned, "-"); hyphen > 0 {
-		prefix := strings.TrimSpace(cleaned[:hyphen])
-		rest := strings.TrimSpace(cleaned[hyphen+1:])
-		if len(prefix) > 1 && isLikelyPrefixGroup(prefix) && rest != "" {
-			return prefix, rest
-		}
-	}
-
-	if open := strings.LastIndex(cleaned, "("); open >= 0 && strings.HasSuffix(cleaned, ")") {
-		inside := strings.TrimSpace(cleaned[open+1 : len(cleaned)-1])
-		before := strings.TrimSpace(cleaned[:open])
-		if inside != "" && before != "" {
-			if isNumericLike(strings.ToLower(inside)) {
-				return "", before
-			}
-			return inside, before
-		}
-	}
-
-	return "", cleaned
-}
-
-func isLikelyPrefixGroup(s string) bool {
-	if s == "" || len(s) > 16 || strings.Contains(s, " ") {
-		return false
-	}
-	hasLetter := false
-	for _, r := range s {
-		if unicode.IsLetter(r) {
-			hasLetter = true
-			if unicode.IsLower(r) {
-				return false
-			}
-			continue
-		}
-		if unicode.IsDigit(r) || r == '.' || r == '_' {
-			continue
-		}
-		return false
-	}
-	return hasLetter
-}
-
 func cleanMovieTitle(raw string) string {
-	raw = stripMovieSubtitle(raw)
 	raw = stripBracketTags(raw)
 	raw = reScreenSizeInTitle.ReplaceAllString(raw, "$1$3")
+	// A numeric parenthetical is commonly a duplicate-download suffix. Other
+	// parentheticals and uppercase hyphenated words remain title information.
+	if m := reTrailingParen.FindStringSubmatchIndex(raw); m != nil && isNumericLike(strings.ToLower(raw[m[2]:m[3]])) {
+		raw = raw[:m[0]]
+	}
 
 	title := cleanMovieTitleText(raw)
 	title = stripMovieEditions(title)
@@ -1232,16 +913,9 @@ func cleanMovieTitle(raw string) string {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '!'
 	}))
 	title = strings.TrimSpace(strings.TrimRightFunc(title, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '!'
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '!' && r != ')'
 	}))
 	title = strings.TrimSpace(reUnclosedParen.ReplaceAllString(title, ""))
-	// Strip trailing channel configs that leaked from meta (e.g., "2.0" → "2 0" after normalization).
-	for _, suffix := range []string{" 2 0", " 5 1", " 7 1"} {
-		if strings.HasSuffix(title, suffix) {
-			title = strings.TrimSpace(strings.TrimSuffix(title, suffix))
-			break
-		}
-	}
 	return title
 }
 
@@ -1342,7 +1016,7 @@ func extractTitle(titleRegion string, seStart, seEnd int, fullName string) strin
 // extractTitleBeforeMetadata gets the title portion before metadata tokens start.
 func extractTitleBeforeMetadata(s string) string {
 	s = stripBracketTags(s)
-	if boundary := firstMetadataTokenIndex(s); boundary >= 0 {
+	if boundary := firstMetadataTokenIndex(s, true); boundary >= 0 {
 		s = s[:boundary]
 	}
 	return strings.Join(strings.FieldsFunc(s, isTokenSep), " ")
@@ -1378,7 +1052,15 @@ func normalizeTitleSeparators(raw string) string {
 	runes := []rune(raw)
 	for i, r := range runes {
 		switch r {
-		case '.', '_':
+		case '.':
+			// Dots between digits inside the title can carry decimal/version
+			// identity. Codec and channel punctuation is handled in metadata.
+			if isTitleDecimal(runes, i) {
+				b.WriteRune(r)
+			} else {
+				b.WriteRune(' ')
+			}
+		case '_':
 			b.WriteRune(' ')
 		case '-':
 			prevWord := i > 0 && (unicode.IsLetter(runes[i-1]) || unicode.IsDigit(runes[i-1]))
@@ -1396,14 +1078,40 @@ func normalizeTitleSeparators(raw string) string {
 	return b.String()
 }
 
-func stripMovieSubtitle(raw string) string {
-	if idx := strings.Index(raw, ".-."); idx >= 0 {
-		return strings.TrimSpace(raw[:idx])
+// A dot-separated pair of arbitrary integers is not necessarily a decimal.
+// Preserve unambiguous space-delimited decimals and version-like N.0 tokens.
+func isTitleDecimal(runes []rune, dot int) bool {
+	if dot == 0 || dot+1 >= len(runes) || !unicode.IsDigit(runes[dot-1]) || !unicode.IsDigit(runes[dot+1]) {
+		return false
 	}
-	if idx := strings.Index(raw, " - "); idx >= 0 {
-		return strings.TrimSpace(raw[:idx])
+	left, right := dot-1, dot+1
+	for left > 0 && unicode.IsDigit(runes[left-1]) {
+		left--
 	}
-	return raw
+	for right+1 < len(runes) && unicode.IsDigit(runes[right+1]) {
+		right++
+	}
+	if right == dot+1 && runes[right] == '0' {
+		return true
+	}
+	return left > 0 && unicode.IsSpace(runes[left-1]) && (right+1 == len(runes) || unicode.IsSpace(runes[right+1]))
+}
+
+// A repeated presentation tag establishes that a trailing 3D is metadata,
+// rather than part of the title. Do not strip an isolated title word "3D".
+func stripPresentationSuffix(title, meta string) string {
+	if strings.HasSuffix(strings.ToLower(title), " - movie") && hasTechnicalMetadata(meta) {
+		title = title[:len(title)-len(" - Movie")]
+	}
+	for _, token := range strings.FieldsFunc(strings.ToLower(meta), isMetaSep) {
+		if token == "3d" || token == "hsbs" || token == "fsbs" {
+			trimmed := strings.TrimRight(title, " ._-")
+			if len(trimmed) > 3 && strings.EqualFold(trimmed[len(trimmed)-2:], "3D") && strings.ContainsRune(" ._", rune(trimmed[len(trimmed)-3])) {
+				return trimmed[:len(trimmed)-3]
+			}
+		}
+	}
+	return title
 }
 
 func stripMovieEditions(title string) string {
@@ -1422,8 +1130,6 @@ func stripMovieEditions(title string) string {
 			lower = strings.ToLower(strings.TrimSpace(title))
 		}
 	}
-
-	title = strings.TrimSpace(rePartSuffix.ReplaceAllString(title, ""))
 
 	return title
 }
@@ -1504,13 +1210,6 @@ func isYearBoundary(b byte) bool {
 	default:
 		return false
 	}
-}
-
-func isSkippableNumericToken(s string) bool {
-	if s == "264" || s == "265" {
-		return false
-	}
-	return isNumericLike(s)
 }
 
 func isCodecNumberInContext(tokens []string, i int) bool {
