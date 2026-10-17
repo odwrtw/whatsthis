@@ -5,8 +5,11 @@ package main
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"syscall/js"
 	"testing"
+
+	"golang.org/x/text/language"
 
 	"github.com/odwrtw/whatsthis"
 )
@@ -58,10 +61,19 @@ func TestFileCollectionMetadata(t *testing.T) {
 		t.Fatalf("file returned invalid JSON: %v", err)
 	}
 	want := whatsthis.Info{Type: whatsthis.Show, Title: "Example", Seasons: []int{2, 3, 4},
-		Languages: []string{"French", "English"}, Multilingual: true,
+		Languages: []language.Tag{language.French, language.English}, Multilingual: true,
 		ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "GROUP"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got: %+v\nwant: %+v", got, want)
+	}
+	var wire struct {
+		Languages []string `json:"languages"`
+	}
+	if err := json.Unmarshal([]byte(encoded), &wire); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(wire.Languages, []string{"fr", "en"}) {
+		t.Fatalf("languages must serialize as BCP 47 strings: %s", encoded)
 	}
 }
 
@@ -80,7 +92,7 @@ func TestSemanticMetadataRoundTrip(t *testing.T) {
 		},
 		{
 			"Example.2024.PERSIAN.m720p.x264.DDP5-GROUP.mkv",
-			whatsthis.Info{Type: whatsthis.Movie, Title: "Example", Year: 2024, ScreenSize: "720p", VideoCodec: "H.264", AudioCodec: "Dolby Digital Plus", ReleaseGroup: "GROUP", Languages: []string{"Persian"}, Container: "mkv", MimeType: "video/x-matroska"},
+			whatsthis.Info{Type: whatsthis.Movie, Title: "Example", Year: 2024, ScreenSize: "720p", VideoCodec: "H.264", AudioCodec: "Dolby Digital Plus", ReleaseGroup: "GROUP", Languages: []language.Tag{language.Persian}, Container: "mkv", MimeType: "video/x-matroska"},
 		},
 	} {
 		for name, parse := range map[string]func(js.Value, []js.Value) any{"file": file, "video": video} {

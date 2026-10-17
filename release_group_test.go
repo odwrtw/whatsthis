@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"golang.org/x/text/language"
 )
 
 func TestPrimaryReleaseGroup(t *testing.T) {
@@ -126,7 +128,7 @@ func TestReleaseGroupMetamorphisms(t *testing.T) {
 			got := File(prefix + ".1080p.x264.AAC-GROUP" + suffix)
 			want := base
 			if suffix == ".[ENG]" {
-				want.Languages = []string{"English"}
+				want.Languages = []language.Tag{language.English}
 			}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("%s%s: got %+v\nwant %+v", prefix, suffix, got, want)

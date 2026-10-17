@@ -2,7 +2,7 @@
 
 [![Test](https://github.com/odwrtw/whatsthis/actions/workflows/test.yml/badge.svg)](https://github.com/odwrtw/whatsthis/actions/workflows/test.yml)
 
-Pure Go library that guesses video metadata (title, year, codec, resolution, release group, etc.) from a filename. Zero dependencies. Inspired by the Python [guessit](https://github.com/guessit-io/guessit) project.
+Pure Go library that guesses video metadata (title, year, codec, resolution, release group, etc.) from a filename. Inspired by the Python [guessit](https://github.com/guessit-io/guessit) project.
 
 ## Installation
 
@@ -44,7 +44,21 @@ fmt.Println(info.Season)  // 0
 
 `Seasons` is nil for movies, episodes, and single-season releases, and omitted from JSON when nil. Overlapping ranges are merged; gaps between separate ranges are preserved. Descending ranges are not expanded. As with single-season packs, collection detection applies to extensionless release names, not video filenames.
 
-`Languages` combines explicit audio and subtitle language tags (for example, `FRENCH`, `ENG`, uppercase `FR`, `VOSTFR`, and `SweSub`), normalized to English names in encounter order without duplicates. `Multilingual` indicates multiple distinct languages or a generic `MULTi`, `Multiple Subtitle`, `DUAL`, or `DL` marker; `WEB-DL` alone does not set it. These fields do **not** establish which audio tracks are present, and unspecified languages are not inferred.
+### Languages
+
+`Languages` is a slice of [`language.Tag`](https://pkg.go.dev/golang.org/x/text/language#Tag) from `golang.org/x/text/language`. It combines explicit audio and subtitle language tags (for example, `FRENCH`, `ENG`, uppercase `FR`, `VOSTFR`, and `SweSub`) in encounter order without duplicates. `CHS` and `CHT` preserve Chinese script information as `zh-Hans` and `zh-Hant`.
+
+```go
+info := whatsthis.Video("Example.2024.FRE.ENG.CHS.1080p.x264-GROUP.mkv")
+fmt.Println(info.Languages)             // [fr en zh-Hans]
+fmt.Println(info.Languages[0].String()) // fr
+```
+
+Compare tags with the predefined values such as `language.French`. For human-readable names, use [`language/display`](https://pkg.go.dev/golang.org/x/text/language/display) in the consuming application; English names are presentation, not identifiers.
+
+**API change:** `Languages` is now `[]language.Tag`, not `[]string`. JSON and the WASM API serialize the tags as BCP 47 strings (for example, `"languages":["fr","en","zh-Hans"]`), not English names. Missing languages remain nil / JSON `null`.
+
+`Multilingual` indicates multiple distinct tags (including script variants) or a generic `MULTi`, `Multiple Subtitle`, `DUAL`, or `DL` marker; `WEB-DL` alone does not set it. These fields do **not** establish which audio tracks are present, and unspecified languages are not inferred. Release-name recognition remains limited to the supported vocabulary and contextual rules, rather than interpreting every valid ISO code as language metadata.
 
 See [parsing policies and limitations](LIMITATIONS.md) for supported conventions and ambiguity handling.
 

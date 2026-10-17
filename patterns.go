@@ -142,38 +142,6 @@ var knownMetadataTokens = map[string]bool{
 	"uncut": true, "unrated": true, "dc": true,
 }
 
-// Common release language codes, names, and aliases, normalized to English names.
-// Short codes and full names require context when locating the title boundary.
-var releaseLanguageNames = map[string]string{
-	"eng": "English", "ita": "Italian", "rus": "Russian", "ukr": "Ukrainian",
-	"ger": "German", "deu": "German", "fre": "French", "fra": "French",
-	"spa": "Spanish", "por": "Portuguese", "pol": "Polish",
-	"jpn": "Japanese", "jap": "Japanese", "kor": "Korean",
-	"chi": "Chinese", "zho": "Chinese", "chs": "Chinese (Simplified)", "cht": "Chinese (Traditional)",
-	"hin": "Hindi", "tur": "Turkish", "dut": "Dutch", "nld": "Dutch",
-	"swe": "Swedish", "dan": "Danish", "fin": "Finnish",
-	"cze": "Czech", "ces": "Czech", "slo": "Slovak", "slk": "Slovak",
-	"hun": "Hungarian", "gre": "Greek", "ell": "Greek", "heb": "Hebrew",
-	"ara": "Arabic", "tha": "Thai", "vie": "Vietnamese", "ind": "Indonesian",
-	"rum": "Romanian", "ron": "Romanian", "bul": "Bulgarian", "hrv": "Croatian",
-	"srp": "Serbian", "slv": "Slovenian", "est": "Estonian", "lav": "Latvian",
-	"lit": "Lithuanian", "isl": "Icelandic",
-	"persian": "Persian", "esubs": "English",
-	"en": "English", "fr": "French", "de": "German", "it": "Italian",
-	"es": "Spanish", "pt": "Portuguese", "pl": "Polish", "ru": "Russian", "uk": "Ukrainian",
-	"ja": "Japanese", "ko": "Korean", "zh": "Chinese", "hi": "Hindi",
-	"english": "English", "french": "French", "german": "German", "italian": "Italian",
-	"spanish": "Spanish", "portuguese": "Portuguese", "polish": "Polish",
-	"russian": "Russian", "ukrainian": "Ukrainian", "japanese": "Japanese",
-	"korean": "Korean", "chinese": "Chinese", "hindi": "Hindi", "turkish": "Turkish",
-	"dutch": "Dutch", "swedish": "Swedish", "danish": "Danish", "finnish": "Finnish",
-	"czech": "Czech", "slovak": "Slovak", "hungarian": "Hungarian", "greek": "Greek",
-	"hebrew": "Hebrew", "arabic": "Arabic", "thai": "Thai", "vietnamese": "Vietnamese",
-	"indonesian": "Indonesian", "romanian": "Romanian", "bulgarian": "Bulgarian",
-	"croatian": "Croatian", "serbian": "Serbian", "slovenian": "Slovenian",
-	"estonian": "Estonian", "latvian": "Latvian", "lithuanian": "Lithuanian", "icelandic": "Icelandic",
-}
-
 // compoundTokens lists hyphenated tokens that should NOT be split into
 // a release-group boundary (e.g., "WEB-DL" is a single metadata token).
 var compoundTokens = map[string]bool{

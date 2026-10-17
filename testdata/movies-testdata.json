@@ -18094,7 +18094,7 @@
       "audio_codec": "AAC",
       "video_codec": "H.264",
       "languages": [
-        "Persian"
+        "fa"
       ],
       "container": "mp4",
       "mimetype": "video/mp4"
@@ -32341,7 +32341,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "H.264",
       "languages": [
-        "German"
+        "de"
       ],
       "multilingual": true,
       "container": "",
@@ -32397,7 +32397,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32417,7 +32417,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32437,7 +32437,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32493,7 +32493,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32513,7 +32513,7 @@
       "audio_codec": "",
       "video_codec": "H.264",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32569,11 +32569,11 @@
       "audio_codec": "AAC",
       "video_codec": "H.265",
       "languages": [
-        "English",
-        "French",
-        "German",
-        "Italian",
-        "Spanish"
+        "en",
+        "fr",
+        "de",
+        "it",
+        "es"
       ],
       "multilingual": true,
       "container": "mkv",
@@ -32611,7 +32611,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32649,7 +32649,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32669,7 +32669,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32689,7 +32689,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32709,7 +32709,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32729,7 +32729,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32749,7 +32749,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32769,7 +32769,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32825,7 +32825,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32845,7 +32845,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32865,7 +32865,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32903,7 +32903,7 @@
       "audio_codec": "",
       "video_codec": "H.264",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32923,7 +32923,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32943,7 +32943,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -32963,7 +32963,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33001,7 +33001,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33021,7 +33021,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33077,7 +33077,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33097,7 +33097,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33135,7 +33135,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33155,7 +33155,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33175,7 +33175,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33195,7 +33195,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33215,8 +33215,8 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "H.264",
       "languages": [
-        "French",
-        "English"
+        "fr",
+        "en"
       ],
       "multilingual": true,
       "container": "",
@@ -33236,7 +33236,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33256,7 +33256,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33276,7 +33276,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33296,7 +33296,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33316,7 +33316,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "H.264",
       "languages": [
-        "German"
+        "de"
       ],
       "multilingual": true,
       "container": "",
@@ -33354,7 +33354,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "H.264",
       "languages": [
-        "Polish"
+        "pl"
       ],
       "multilingual": false,
       "container": "",
@@ -33374,7 +33374,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33394,7 +33394,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33414,7 +33414,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33434,7 +33434,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33454,7 +33454,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "H.264",
       "languages": [
-        "German"
+        "de"
       ],
       "multilingual": true,
       "container": "",
@@ -33510,7 +33510,7 @@
       "audio_codec": "",
       "video_codec": "H.264",
       "languages": [
-        "Hindi"
+        "hi"
       ],
       "multilingual": false,
       "container": "",
@@ -33530,7 +33530,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33550,7 +33550,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33570,7 +33570,7 @@
       "audio_codec": "Dolby Digital",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -33590,7 +33590,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",

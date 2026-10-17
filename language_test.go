@@ -1,25 +1,33 @@
 package whatsthis
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
+
+	"golang.org/x/text/language"
 )
 
 func TestCombinedLanguageMetadata(t *testing.T) {
 	for _, test := range []struct {
 		metadata     string
-		languages    []string
+		languages    []language.Tag
 		multilingual bool
 	}{
-		{"FRENCH", []string{"French"}, false},
-		{"TRUEFRENCH.FRE.fra.French", []string{"French"}, false},
-		{"GERMAN.DL", []string{"German"}, true},
-		{"FR.EN.eng", []string{"French", "English"}, true},
-		{"ENG+JPN", []string{"English", "Japanese"}, true},
-		{"ENG&GER", []string{"English", "German"}, true},
-		{"Hindi.Japanese.ENG", []string{"Hindi", "Japanese", "English"}, true},
-		{"VOSTFR.SweSub", []string{"French", "Swedish"}, true},
-		{"Eng.Sub", []string{"English"}, false},
+		{"FRENCH", []language.Tag{language.French}, false},
+		{"TRUEFRENCH.FRE.fra.French", []language.Tag{language.French}, false},
+		{"GERMAN.DL", []language.Tag{language.German}, true},
+		{"FR.EN.eng", []language.Tag{language.French, language.English}, true},
+		{"ENG+JPN", []language.Tag{language.English, language.Japanese}, true},
+		{"ENG&GER", []language.Tag{language.English, language.German}, true},
+		{"Hindi.Japanese.ENG", []language.Tag{language.Hindi, language.Japanese, language.English}, true},
+		{"VOSTFR.SweSub", []language.Tag{language.French, language.Swedish}, true},
+		{"Eng.Sub", []language.Tag{language.English}, false},
+		{"GER.deu.German", []language.Tag{language.German}, false},
+		{"CHI.zho.Chinese", []language.Tag{language.Chinese}, false},
+		{"CHS.CHSSub", []language.Tag{language.SimplifiedChinese}, false},
+		{"CHT.CHTSub", []language.Tag{language.TraditionalChinese}, false},
+		{"CHS.CHT", []language.Tag{language.SimplifiedChinese, language.TraditionalChinese}, true},
 		{"Dual-Audio", nil, true},
 		{"DUAL", nil, true},
 		{"Multi-Subs", nil, true},
@@ -65,17 +73,17 @@ func TestLeadingLanguageTags(t *testing.T) {
 	}{
 		{
 			"[Eng Sub] [GROUP] Example.S02E03.[JPN].1080p.x264-GROUP.mkv",
-			Info{Type: Episode, Title: "Example", Season: 2, Episode: 3, Languages: []string{"English", "Japanese"}, Multilingual: true,
+			Info{Type: Episode, Title: "Example", Season: 2, Episode: 3, Languages: []language.Tag{language.English, language.Japanese}, Multilingual: true,
 				ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "GROUP", Container: "mkv", MimeType: "video/x-matroska"},
 		},
 		{
 			"[GROUP] [FRENCH] Example.2024.1080p.x264-GROUP.mkv",
-			Info{Type: Movie, Title: "Example", Year: 2024, Languages: []string{"French"},
+			Info{Type: Movie, Title: "Example", Year: 2024, Languages: []language.Tag{language.French},
 				ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "GROUP", Container: "mkv", MimeType: "video/x-matroska"},
 		},
 		{
 			"[French] Example.S02E03.mkv",
-			Info{Type: Episode, Title: "Example", Season: 2, Episode: 3, Languages: []string{"French"}, Container: "mkv", MimeType: "video/x-matroska"},
+			Info{Type: Episode, Title: "Example", Season: 2, Episode: 3, Languages: []language.Tag{language.French}, Container: "mkv", MimeType: "video/x-matroska"},
 		},
 		{
 			"Example.[DUAL.AUDIO]2024.1080p.x264-GROUP.mkv",
@@ -89,7 +97,7 @@ func TestLeadingLanguageTags(t *testing.T) {
 		},
 		{
 			"[ENG] [GROUP] Example.S02.[ENG].[GER].1080p.x264-GROUP",
-			Info{Type: ShowSeason, Title: "Example", Season: 2, Languages: []string{"English", "German"}, Multilingual: true,
+			Info{Type: ShowSeason, Title: "Example", Season: 2, Languages: []language.Tag{language.English, language.German}, Multilingual: true,
 				ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "GROUP"},
 		},
 	} {
@@ -154,5 +162,46 @@ func TestLanguageTokenBoundaries(t *testing.T) {
 	languages, multilingual := extractLanguages("Englishman.Multiverse.MultipleChoice.Duality.ADL.Frenchman")
 	if languages != nil || multilingual {
 		t.Fatalf("matched part of a word: %v, %t", languages, multilingual)
+	}
+}
+
+func TestLanguageVocabularyIsNotArbitraryISOCodes(t *testing.T) {
+	// These can be valid language codes, but are not language evidence in
+	// release names. In particular, AAC and AVC are codec tags.
+	for _, metadata := range []string{"AAC.AVC.NEW.SUB", "CAM.MAY.MAX", "LAT.SUB.VOF"} {
+		input := "Example.2024." + metadata + ".1080p.x264-GROUP.mkv"
+		if got := File(input); got.Languages != nil || got.Multilingual {
+			t.Fatalf("%q: unexpected language metadata: %+v", input, got)
+		}
+	}
+}
+
+func TestLanguageJSON(t *testing.T) {
+	for _, test := range []struct {
+		metadata string
+		want     string
+	}{
+		{"ENG.FRE.CHS.CHT.ENG", `["en","fr","zh-Hans","zh-Hant"]`},
+		{"PERSIAN", `["fa"]`},
+		{"WEB-DL", `null`},
+		{"MULTi", `null`},
+	} {
+		t.Run(test.metadata, func(t *testing.T) {
+			info := File("Example.2024." + test.metadata + ".1080p.x264-GROUP.mkv")
+			encoded, err := json.Marshal(info.Languages)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(encoded) != test.want {
+				t.Fatalf("got %s, want %s", encoded, test.want)
+			}
+			var decoded []language.Tag
+			if err := json.Unmarshal(encoded, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(decoded, info.Languages) {
+				t.Fatalf("round trip: got %v, want %v", decoded, info.Languages)
+			}
+		})
 	}
 }

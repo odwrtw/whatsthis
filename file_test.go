@@ -3,6 +3,8 @@ package whatsthis
 import (
 	"reflect"
 	"testing"
+
+	"golang.org/x/text/language"
 )
 
 func TestFileWholeSeasons(t *testing.T) {
@@ -212,7 +214,7 @@ func TestFileRepeatedSeasonRanges(t *testing.T) {
 func TestFileSeasonPackWithWebsiteSuffix(t *testing.T) {
 	name := "Example.Show.s01.HD720p.WEBRip.Rus.ExampleSite.tv"
 	got := File(name)
-	want := Info{Type: ShowSeason, Title: "Example Show", Season: 1, ScreenSize: "720p", Languages: []string{"Russian"}}
+	want := Info{Type: ShowSeason, Title: "Example Show", Season: 1, ScreenSize: "720p", Languages: []language.Tag{language.Russian}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("File(%q) = %+v, want %+v", name, got, want)
 	}

@@ -3,6 +3,8 @@ package whatsthis
 import (
 	"reflect"
 	"testing"
+
+	"golang.org/x/text/language"
 )
 
 func TestMetadataAliasAudioCodecs(t *testing.T) {
@@ -78,14 +80,14 @@ func TestMetadataAliasesFullInfo(t *testing.T) {
 	for _, alias := range []struct {
 		metadata string
 		audio    string
-		language string
+		lang     language.Tag
 	}{
-		{"Persian.m720p.WEB-DL.x264.DDP5", "Dolby Digital Plus", "Persian"},
-		{"Persian.720pBrRip.x264.DD+", "Dolby Digital Plus", "Persian"},
-		{"ESubs.m720p.x264.QAACx2", "AAC", "English"},
-		{"E-Subs.m720p.x264.QAACx2", "AAC", "English"},
-		{"ESubs.720pBrRip.x264.DDP", "Dolby Digital Plus", "English"},
-		{"720pBrRip.x264.DD+5.ESubs", "Dolby Digital Plus", "English"},
+		{"Persian.m720p.WEB-DL.x264.DDP5", "Dolby Digital Plus", language.Persian},
+		{"Persian.720pBrRip.x264.DD+", "Dolby Digital Plus", language.Persian},
+		{"ESubs.m720p.x264.QAACx2", "AAC", language.English},
+		{"E-Subs.m720p.x264.QAACx2", "AAC", language.English},
+		{"ESubs.720pBrRip.x264.DDP", "Dolby Digital Plus", language.English},
+		{"720pBrRip.x264.DD+5.ESubs", "Dolby Digital Plus", language.English},
 	} {
 		for _, media := range []struct {
 			prefix string
@@ -99,7 +101,7 @@ func TestMetadataAliasesFullInfo(t *testing.T) {
 			input := media.prefix + alias.metadata + "-GROUP"
 			want := media.want
 			want.ScreenSize, want.VideoCodec, want.AudioCodec = "720p", "H.264", alias.audio
-			want.ReleaseGroup, want.Languages = "GROUP", []string{alias.language}
+			want.ReleaseGroup, want.Languages = "GROUP", []language.Tag{alias.lang}
 			parsers := map[string]func(string) Info{"File": File}
 			if want.Type == Movie || want.Type == Episode {
 				input += ".mkv"
@@ -133,7 +135,7 @@ func TestMetadataAliasAttachedEpisode(t *testing.T) {
 
 func TestYearlessSubtitleAlias(t *testing.T) {
 	for _, alias := range []string{"E-Subs", "ESubs"} {
-		assertVideoInfo(t, "Example."+alias+".720p.x264-GROUP.mkv", Info{Type: Movie, Title: "Example", ScreenSize: "720p", VideoCodec: "H.264", ReleaseGroup: "GROUP", Languages: []string{"English"}, Container: "mkv", MimeType: "video/x-matroska"})
+		assertVideoInfo(t, "Example."+alias+".720p.x264-GROUP.mkv", Info{Type: Movie, Title: "Example", ScreenSize: "720p", VideoCodec: "H.264", ReleaseGroup: "GROUP", Languages: []language.Tag{language.English}, Container: "mkv", MimeType: "video/x-matroska"})
 	}
 }
 
@@ -184,7 +186,7 @@ func TestMetadataAliasLanguageBoundaries(t *testing.T) {
 	}
 	for _, metadata := range []string{"PERSIAN", "Persian.720p", "Persian.QAACx2"} {
 		languages, multilingual := extractLanguages(metadata)
-		if !reflect.DeepEqual(languages, []string{"Persian"}) || multilingual {
+		if !reflect.DeepEqual(languages, []language.Tag{language.Persian}) || multilingual {
 			t.Errorf("%q: got %v, %t; want Persian only", metadata, languages, multilingual)
 		}
 	}
@@ -209,7 +211,7 @@ func TestEnglishSubtitleAliasNormalization(t *testing.T) {
 		})
 	}
 	languages, multilingual := extractLanguages(normalizeSubtitleAliases("GER.E-Subs.ENG.JPN"))
-	want := []string{"German", "English", "Japanese"}
+	want := []language.Tag{language.German, language.English, language.Japanese}
 	if !reflect.DeepEqual(languages, want) || !multilingual {
 		t.Fatalf("got %v, %t; want %v, true", languages, multilingual, want)
 	}

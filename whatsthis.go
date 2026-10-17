@@ -5,6 +5,8 @@ package whatsthis
 import (
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/text/language"
 )
 
 // Type represents the type of media (episode, movie, etc.).
@@ -40,9 +42,10 @@ type Info struct {
 	AudioCodec   string `json:"audio_codec"`
 	VideoCodec   string `json:"video_codec"`
 	// Languages contains explicit audio or subtitle language tags, in encounter
-	// order without duplicates. It does not identify audio-track languages.
-	Languages []string `json:"languages"`
-	// Multilingual reports multiple distinct languages or a generic multi/dual
+	// order without duplicates. Tags serialize as BCP 47 strings (e.g., "fr",
+	// "zh-Hans"). It does not identify audio-track languages.
+	Languages []language.Tag `json:"languages"`
+	// Multilingual reports multiple distinct language tags or a generic multi/dual
 	// marker, including subtitle markers. It does not imply multiple audio tracks.
 	Multilingual bool   `json:"multilingual"`
 	Container    string `json:"container"`

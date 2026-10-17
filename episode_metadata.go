@@ -72,14 +72,14 @@ func episodeMetadataStart(meta string) int {
 				return start
 			}
 		}
-		if language := releaseLanguageName(lower); language != "" {
+		if lang := lookupReleaseLanguage(lower); lang.valid() {
 			tail := strings.TrimLeft(meta[end:], " ._-")
 			next := tail
 			if i := strings.IndexFunc(tail, isMetaSep); i >= 0 {
 				next = tail[:i]
 			}
 			tagContext := tail == "" || meta[end] == ']' || next != "" && isKnownToken(next)
-			if token == strings.ToUpper(token) && tagContext || len(lower) > 2 && !strings.EqualFold(lower, language) {
+			if token == strings.ToUpper(token) && tagContext || len(lower) > 2 && !lang.fullName {
 				return start
 			}
 		}
