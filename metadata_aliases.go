@@ -9,7 +9,7 @@ var reHyphenatedEnglishSubs = regexp.MustCompile(`(?i)e-subs`)
 
 // normalizeSubtitleAliases keeps E-Subs together before metadata tokenization,
 // so its E is not mistaken for a language code or discarded. Plain ESubs is
-// already handled by releaseLanguageNames. Only complete tags are rewritten.
+// already handled by lookupReleaseLanguage. Only complete tags are rewritten.
 func normalizeSubtitleAliases(meta string) string {
 	var normalized strings.Builder
 	last := 0

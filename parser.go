@@ -497,7 +497,7 @@ func hasMetadataTokens(s string) bool {
 		if knownMetadataTokens[tok] || isPresentationToken(tok) {
 			return true
 		}
-		if releaseLanguageName(tok) != "" || reScreenSizeToken.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
+		if lookupReleaseLanguage(tok).valid() || reScreenSizeToken.MatchString(tok) || reScreenSizeNumberToken.MatchString(tok) {
 			return true
 		}
 		if _, ok := screenSizeDimensions[tok]; ok {
@@ -555,66 +555,6 @@ func leadingBracketTags(name string) string {
 	return strings.Join(tags, " ")
 }
 
-// releaseLanguageName handles explicit language tags, including subtitle
-// affixes (VOSTFR, SweSub) and the TRUEFRENCH audio-language marker.
-func releaseLanguageName(token string) string {
-	if language := releaseLanguageNames[token]; language != "" {
-		return language
-	}
-	for _, prefix := range []string{"vost", "true"} {
-		if rest, ok := strings.CutPrefix(token, prefix); ok {
-			if language := releaseLanguageNames[rest]; language != "" {
-				return language
-			}
-		}
-	}
-	for _, suffix := range []string{"subtitles", "subtitle", "subs", "sub", "audio"} {
-		if rest, ok := strings.CutSuffix(token, suffix); ok {
-			if language := releaseLanguageNames[rest]; language != "" {
-				return language
-			}
-		}
-	}
-	return ""
-}
-
-// extractLanguages identifies generic multilingual markers and explicit
-// audio or subtitle language tags from the metadata region.
-func extractLanguages(meta string) ([]string, bool) {
-	meta = normalizeSubtitleAliases(meta)
-	var languages []string
-	seen := make(map[string]bool)
-	multilingual := false
-
-	tokens := strings.FieldsFunc(meta, isMetaSep)
-	for i, token := range tokens {
-		lower := strings.ToLower(token)
-		upper := token == strings.ToUpper(token)
-		metadataNeighbor := i > 0 && isKnownToken(tokens[i-1]) || i+1 < len(tokens) && isKnownToken(tokens[i+1])
-		switch lower {
-		case "multi", "multiple", "dual", "dl":
-			// DL means dual language, except in the source tag WEB-DL.
-			if lower == "dl" && i > 0 && strings.EqualFold(tokens[i-1], "web") {
-				continue
-			}
-			multilingual = multilingual || upper || metadataNeighbor
-			continue
-		}
-		language := releaseLanguageName(lower)
-		// Weak words and short codes can also be episode-title text (It Was
-		// the Change, Cinco de Mayo, Greek Life). Require release-tag context.
-		if len(lower) == 2 && !upper || strings.EqualFold(lower, language) && !upper && !metadataNeighbor {
-			continue
-		}
-		if language != "" && !seen[language] {
-			languages = append(languages, language)
-			seen[language] = true
-		}
-	}
-
-	return languages, multilingual || len(languages) > 1
-}
-
 // isKnownToken checks if a lowercase token is a known metadata keyword,
 // screen size, codec, or language.
 func isKnownToken(tok string) bool {
@@ -630,7 +570,7 @@ func isKnownToken(tok string) bool {
 	if knownMetadataTokens[tok] || isPresentationToken(tok) {
 		return true
 	}
-	if releaseLanguageName(tok) != "" {
+	if lookupReleaseLanguage(tok).valid() {
 		return true
 	}
 	if _, ok := screenSizeDimensions[tok]; ok {
@@ -639,7 +579,7 @@ func isKnownToken(tok string) bool {
 	if parts := strings.Split(tok, "-"); len(parts) > 1 {
 		allLanguages := true
 		for _, part := range parts {
-			if releaseLanguageName(part) == "" {
+			if !lookupReleaseLanguage(part).valid() {
 				allLanguages = false
 				break
 			}
@@ -860,8 +800,8 @@ func firstMetadataTokenIndex(s string, inTitle bool) int {
 		if inTitle && t.tok == "3d" && strings.LastIndexByte(s[:t.start], '[') <= strings.LastIndexByte(s[:t.start], ']') {
 			continue
 		}
-		language := releaseLanguageName(t.tok)
-		weakLanguage := language != "" && (len(t.tok) == 2 || strings.EqualFold(t.tok, language))
+		lang := lookupReleaseLanguage(t.tok)
+		weakLanguage := lang.valid() && (len(t.tok) == 2 || lang.fullName)
 		if weakLanguage {
 			// A language word alone can be the title (French), and short codes
 			// need uppercase release-tag context (not This Is It).

@@ -2861,7 +2861,7 @@
       "audio_codec": "AAC",
       "video_codec": "H.265",
       "languages": [
-        "English"
+        "en"
       ],
       "container": "mkv",
       "mimetype": "video/x-matroska"
@@ -8480,7 +8480,7 @@
       "audio_codec": "",
       "video_codec": "H.264",
       "languages": [
-        "English"
+        "en"
       ],
       "container": "mkv",
       "mimetype": "video/x-matroska"
@@ -26205,7 +26205,7 @@
       "audio_codec": "",
       "video_codec": "",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -26243,7 +26243,7 @@
       "audio_codec": "",
       "video_codec": "",
       "languages": [
-        "Swedish"
+        "sv"
       ],
       "multilingual": false,
       "container": "mp4",
@@ -26317,7 +26317,7 @@
       "audio_codec": "",
       "video_codec": "H.264",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -26356,7 +26356,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -26666,7 +26666,7 @@
       "audio_codec": "AAC",
       "video_codec": "H.264",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -26848,7 +26848,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -26868,7 +26868,7 @@
       "audio_codec": "",
       "video_codec": "Xvid",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "",
@@ -26943,7 +26943,7 @@
       "audio_codec": "",
       "video_codec": "",
       "languages": [
-        "English"
+        "en"
       ],
       "multilingual": false,
       "container": "",
@@ -27000,7 +27000,7 @@
       "audio_codec": "",
       "video_codec": "H.264",
       "languages": [
-        "Swedish"
+        "sv"
       ],
       "multilingual": false,
       "container": "",
@@ -27038,7 +27038,7 @@
       "audio_codec": "",
       "video_codec": "H.264",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "mp4",
@@ -27239,7 +27239,7 @@
       "audio_codec": "",
       "video_codec": "",
       "languages": [
-        "English"
+        "en"
       ],
       "multilingual": false,
       "container": "mkv",
@@ -27494,7 +27494,7 @@
       "audio_codec": "",
       "video_codec": "",
       "languages": [
-        "French"
+        "fr"
       ],
       "multilingual": false,
       "container": "mp4",

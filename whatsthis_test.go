@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+
+	"golang.org/x/text/language"
 )
 
 type entry struct {
@@ -110,7 +112,7 @@ func TestGuessReleaseGroupBeforeMetadataBrackets(t *testing.T) {
 			t.Run(input, func(t *testing.T) {
 				want := Info{
 					Type: Movie, Title: "Example", Year: 2024,
-					ScreenSize: "1080p", VideoCodec: "H.264", Languages: []string{"English"},
+					ScreenSize: "1080p", VideoCodec: "H.264", Languages: []language.Tag{language.English},
 					ReleaseGroup: "GROUP", Container: "mkv", MimeType: "video/x-matroska",
 				}
 				if prefix == "Example.S01E01" {
@@ -268,25 +270,25 @@ func TestGuessLanguageMetadata(t *testing.T) {
 	tests := []struct {
 		name         string
 		input        string
-		languages    []string
+		languages    []language.Tag
 		multilingual bool
 	}{
 		{
 			name:         "episode tags",
 			input:        "The.Travelers.S05E06.Beyond.the.horizon.ITA.ENG.1080p.AMZN.WEB-DL.DDP5.1.H.264-GRP.EX.mkv",
-			languages:    []string{"Italian", "English"},
+			languages:    []language.Tag{language.Italian, language.English},
 			multilingual: true,
 		},
 		{
 			name:         "movie tags",
 			input:        "Example.Movie.2024.ITA.ENG.1080p.WEB-DL.H.264-GROUP.mkv",
-			languages:    []string{"Italian", "English"},
+			languages:    []language.Tag{language.Italian, language.English},
 			multilingual: true,
 		},
 		{
 			name:         "whole season with generic marker",
 			input:        "Example.Show.S01.MULTi.ITA.ENG.1080p.WEB-DL.H.264-GROUP",
-			languages:    []string{"Italian", "English"},
+			languages:    []language.Tag{language.Italian, language.English},
 			multilingual: true,
 		},
 		{
