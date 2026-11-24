@@ -15,7 +15,7 @@ type Type string
 const (
 	// Episode indicates a TV show episode.
 	Episode Type = "episode"
-	// ShowSeason indicates a complete TV show season.
+	// ShowSeason indicates a season release, not verified completeness.
 	ShowSeason Type = "show_season"
 	// Show indicates a multi-season TV show collection.
 	Show Type = "show"
@@ -29,6 +29,11 @@ type Info struct {
 	Title   string `json:"title"`
 	Episode int    `json:"episode"`
 	Season  int    `json:"season"`
+	// Episodes lists the sorted, unique episodes named by an explicit
+	// single-season multi-episode marker (S01E02E03, S01E02-04, 1x02x03).
+	// Ranges are expanded. It is nil unless at least two episodes are named.
+	// For a ShowSeason, it is what the name claims, not verified completeness.
+	Episodes []int `json:"episodes,omitempty"`
 	// Seasons lists the sorted, unique seasons in explicit multi-season ranges.
 	// It is nil for movies, episodes, and single-season releases; Season is
 	// still zero for multi-season collections.

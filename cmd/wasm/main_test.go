@@ -113,6 +113,33 @@ func TestSemanticMetadataRoundTrip(t *testing.T) {
 	}
 }
 
+func TestEpisodesJSON(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		parse    func(js.Value, []js.Value) any
+		input    string
+		episodes string
+	}{
+		{"file range directory", file, "Example.S01E01-03.1080p.x264-GROUP", `[1,2,3]`},
+		{"video list", video, "Example.S01E02E04.mkv", `[2,4]`},
+		{"single episode", video, "Example.S01E02.mkv", ``},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			encoded, ok := test.parse(js.Undefined(), []js.Value{js.ValueOf(test.input)}).(string)
+			if !ok {
+				t.Fatal("parser did not return a JSON string")
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(encoded), &fields); err != nil {
+				t.Fatal(err)
+			}
+			if string(fields["episodes"]) != test.episodes {
+				t.Fatalf("unexpected episodes: %s", encoded)
+			}
+		})
+	}
+}
+
 func TestFileRejectsInvalidArguments(t *testing.T) {
 	if got := file(js.Undefined(), nil); got != "" {
 		t.Fatalf("file with no arguments returned %#v", got)

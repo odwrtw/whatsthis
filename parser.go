@@ -32,6 +32,7 @@ func parse(input string) Info {
 
 	// Step 2: Extract season and episode — primary anchor.
 	season, episode, seStart, seEnd := extractSeasonEpisode(name)
+	g.Episodes, seEnd = extractEpisodes(name, season, episode, seStart, seEnd)
 	if seStart < 0 {
 		season, seStart, seEnd = findSeasonMarker(name)
 	}
@@ -108,24 +109,30 @@ func parseSeasonName(name string) (Info, bool) {
 	if !ok {
 		return Info{}, false
 	}
-	// A season followed by an episode is not a pack. Keep the existing
-	// explicit episode-range and multi-season collection policies.
+	// A season followed by an episode is not a pack, except for an explicit
+	// single-season range starting at E01 at the episode anchor. Multi-season
+	// collections keep their existing policy.
+	episodeSeason, episode, episodeStart, episodeEnd := extractSeasonEpisode(name)
+	episodes, episodesEnd := extractEpisodes(name, episodeSeason, episode, episodeStart, episodeEnd)
 	wholeEpisodeRange := false
-	for _, m := range reSeasonEpisodeRange.FindAllStringSubmatch(strings.ReplaceAll(name, "_", " "), -1) {
-		first, _ := strconv.Atoi(m[2])
-		last, _ := strconv.Atoi(m[3])
-		wholeEpisodeRange = wholeEpisodeRange || first == 1 && last > first
+	if episodeStart >= 0 && episode == 1 && episodeSeason == season && episodes != nil {
+		m := reSeasonEpisodeRange.FindStringIndex(strings.ReplaceAll(name[episodeStart:], "_", " "))
+		wholeEpisodeRange = m != nil && m[0] == 0
 	}
-	if typ != Show && !wholeEpisodeRange {
-		if _, _, start, _ := extractSeasonEpisode(name); start >= 0 {
-			return Info{}, false
-		}
+	if typ != Show && !wholeEpisodeRange && episodeStart >= 0 {
+		return Info{}, false
 	}
 
 	g := Info{
 		Type:    typ,
 		Season:  season,
 		Seasons: seasons,
+	}
+	if typ != Show && wholeEpisodeRange {
+		g.Episodes = episodes
+		if markerStart == episodeStart {
+			markerEnd = episodesEnd
+		}
 	}
 
 	titleRegion := reComplete.ReplaceAllString(name[:markerStart], " ")
@@ -289,13 +296,15 @@ func extractContainer(input string) (name, container string) {
 func extractSeasonEpisode(name string) (season, episode, start, end int) {
 	// Replacing ASCII separators preserves byte offsets into the original name.
 	name = strings.ReplaceAll(name, "_", " ")
-	// Try SxxExx pattern first (most common).
+	// Try SxxExx pattern first (most common), but not inside release metadata
+	// or a trailing group such as x264-S01E02.
 	if m := reSeasonEpisode.FindStringSubmatchIndex(name); m != nil {
-		s, _ := strconv.Atoi(name[m[2]:m[3]])
-		e, _ := strconv.Atoi(name[m[4]:m[5]])
-		// The marker starts one byte before the season digits, at S,
-		// excluding the boundary character consumed by the regexp.
-		return s, e, m[2] - 1, m[5]
+		start := m[2] - 1 // Exclude the boundary consumed by the regexp.
+		if !isEpisodeCredit(name, start) {
+			s, _ := strconv.Atoi(name[m[2]:m[3]])
+			e, _ := strconv.Atoi(name[m[4]:m[5]])
+			return s, e, start, m[5]
+		}
 	}
 
 	for _, re := range []*regexp.Regexp{reCrossEpisode, reWordSeasonEpisode, reLooseSeasonEpisode} {

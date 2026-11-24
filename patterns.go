@@ -36,6 +36,13 @@ var (
 	reAnimeEpisode       = regexp.MustCompile(`(?i)(?:^|[\s.(\[])(\d{2,4})(?:v\d+)?(?:$|[\s.()\[\]])`)
 	reEpisodeAfterSeason = regexp.MustCompile(`^[\s.()\[\]-]*(\d{1,4})(?:$|[\s.(\[])`)
 
+	// Multi-episode continuations after an explicit SxxEyy or NxMM marker:
+	// separator, label (S01E, 1x, E or x) and number, as in S01E02-E03.
+	reEpisodeMarker       = regexp.MustCompile(`(?i)^(?:S\d{1,4}[\s.x-]*Ep?[\s.#-]*|(\d{1,2})x)\d{1,4}$`)
+	reEpisodeContinuation = regexp.MustCompile(`(?i)^(\s*-\s*|\.)?(S(\d{1,3})E|(\d{1,2})x|E|x)?(\d{1,3})`)
+	// Audio channel counts such as 5.1 and 2.0 are not range endpoints.
+	reChannelSuffix = regexp.MustCompile(`^\d\.\d(?:$|[^0-9])`)
+
 	// Compact episode: 3-4 digits where first 1-2 are season, last 2 are episode.
 	// E.g., 217 -> S02E17, 1316 -> S13E16, 104 -> S01E04.
 	reCompactEpisode = regexp.MustCompile(`(?:^|[.\s])(\d{3,4})(?:[.\s]|$)`)
