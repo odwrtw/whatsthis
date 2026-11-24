@@ -2,6 +2,8 @@ package whatsthis
 
 import (
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -179,6 +181,9 @@ func TestUnderscoreSeasonPacks(t *testing.T) {
 		input := "Show_" + marker + "_1080p_x264-[my_group]"
 		t.Run(input, func(t *testing.T) {
 			want := Info{Type: ShowSeason, Title: "Show", Season: 1, ScreenSize: "1080p", VideoCodec: "H.264", ReleaseGroup: "my_group"}
+			if marker == "S01E01-08" {
+				want.Episodes = []int{1, 2, 3, 4, 5, 6, 7, 8}
+			}
 			if got := File(input); !reflect.DeepEqual(got, want) {
 				t.Fatalf("got: %+v\nwant: %+v", got, want)
 			}
@@ -201,6 +206,9 @@ func FuzzFile(f *testing.F) {
 		"Show.S02E03.E-Subs.E-Subs.AAC", "Movie.2024.x264-[example.com/path].mkv",
 		"Movie.2024.x264-ȺȺȺȺȺȺȺȺȺȺ.mkv-note.mkv", "Example.E-Subs.720p.x264.mkv",
 		"Movie.2024.x264-GROUP[EXAMPLE.PL].mkv", "Movie.2024.x264-GROUP.mkv-ENG.mkv",
+		"Show.S01E02-E04E06.mkv", "Show.S01E02-S02E01.1080p.x264", "Show.S01E01-08S02E01.1080p.x264",
+		"Show.S01E05-03.mkv", "Show.1x02x03-1x05.mkv", "Show.S01E01 - E999.1080p",
+		"Show.S01E02" + strings.Repeat("-E999E01", 300) + ".mkv",
 	} {
 		f.Add(input)
 	}
@@ -220,6 +228,17 @@ func FuzzFile(f *testing.F) {
 				}
 			} else if got.Seasons != nil {
 				t.Fatalf("season list on a non-collection: %+v", got)
+			}
+			if got.Episodes != nil {
+				if len(got.Episodes) < 2 || got.Type != Episode && got.Type != ShowSeason ||
+					got.Type == Episode && !slices.Contains(got.Episodes, got.Episode) {
+					t.Fatalf("invalid episode list: %+v", got)
+				}
+				for i, episode := range got.Episodes {
+					if episode < 0 || episode > 999 || i > 0 && episode <= got.Episodes[i-1] {
+						t.Fatalf("invalid episode list: %+v", got)
+					}
+				}
 			}
 			switch got.Type {
 			case Movie, Episode, ShowSeason, Show:

@@ -44,6 +44,19 @@ fmt.Println(info.Season)  // 0
 
 `Seasons` is nil for movies, episodes, and single-season releases, and omitted from JSON when nil. Overlapping ranges are merged; gaps between separate ranges are preserved. Descending ranges are not expanded. As with single-season packs, collection detection applies to extensionless release names, not video filenames.
 
+### Multiple episodes
+
+Explicit single-season multi-episode markers are returned as a sorted, deduplicated `Episodes` list, with ranges expanded. `Episode` keeps the first named episode:
+
+```go
+info := whatsthis.Video("Example.Show.S02E05E06.1080p.WEB-DL.x264-GROUP.mkv")
+fmt.Println(info.Season)   // 2
+fmt.Println(info.Episode)  // 5
+fmt.Println(info.Episodes) // [5 6]
+```
+
+Supported forms include `S01E02E03`, `S01E02-E03`, `S01E02-03`, `S01E02-03-04`, `S01E02.S01E03` and `1x02x03`. `Episodes` is nil for single episodes and omitted from JSON when nil. For an extensionless `S01E01-08` season directory, `File` returns a `show_season` with `Episodes` 1 to 8: the episodes the name claims, not proof that the season is complete.
+
 ### Languages
 
 `Languages` is a slice of [`language.Tag`](https://pkg.go.dev/golang.org/x/text/language#Tag) from `golang.org/x/text/language`. It combines explicit audio and subtitle language tags (for example, `FRENCH`, `ENG`, uppercase `FR`, `VOSTFR`, and `SweSub`) in encounter order without duplicates. `CHS` and `CHT` preserve Chinese script information as `zh-Hans` and `zh-Hant`.

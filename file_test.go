@@ -78,12 +78,12 @@ func TestFileWholeSeasons(t *testing.T) {
 		},
 		{
 			name: "VELVET.MERIDIAN.S01E01-08.1080p.WEB-DL.DDP5.1.H.265",
-			expected: Info{Type: ShowSeason, Title: "VELVET MERIDIAN", Season: 1, ScreenSize: "1080p",
+			expected: Info{Type: ShowSeason, Title: "VELVET MERIDIAN", Season: 1, Episodes: []int{1, 2, 3, 4, 5, 6, 7, 8}, ScreenSize: "1080p",
 				AudioCodec: "Dolby Digital Plus", VideoCodec: "H.265"},
 		},
 		{
 			name: "VELVET.MERIDIAN.S01E01-08.1080p.WEB-DL.DDP5.1.H.264",
-			expected: Info{Type: ShowSeason, Title: "VELVET MERIDIAN", Season: 1, ScreenSize: "1080p",
+			expected: Info{Type: ShowSeason, Title: "VELVET MERIDIAN", Season: 1, Episodes: []int{1, 2, 3, 4, 5, 6, 7, 8}, ScreenSize: "1080p",
 				AudioCodec: "Dolby Digital Plus", VideoCodec: "H.264"},
 		},
 		{

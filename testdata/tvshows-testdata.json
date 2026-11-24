@@ -27716,5 +27716,48 @@
       "container": "mkv",
       "mimetype": "video/x-matroska"
     }
+  },
+  {
+    "filename": "Velvet.Meridian.S01E02E04.1080p.WEB-DL.x264.AAC-GROUP.mkv",
+    "expected": {
+      "type": "episode",
+      "title": "Velvet Meridian",
+      "episode": 2,
+      "season": 1,
+      "episodes": [2, 4],
+      "screen_size": "1080p",
+      "release_group": "GROUP",
+      "audio_codec": "AAC",
+      "video_codec": "H.264",
+      "container": "mkv",
+      "mimetype": "video/x-matroska"
+    }
+  },
+  {
+    "filename": "Velvet.Meridian.S01E08-S02E01.1080p.x264-GROUP.mkv",
+    "expected": {
+      "type": "episode",
+      "title": "Velvet Meridian",
+      "episode": 8,
+      "season": 1,
+      "screen_size": "1080p",
+      "release_group": "GROUP",
+      "video_codec": "H.264",
+      "container": "mkv",
+      "mimetype": "video/x-matroska"
+    }
+  },
+  {
+    "filename": "Velvet.Meridian.S01E01-08.1080p.x264-GROUP",
+    "parser": "file",
+    "expected": {
+      "type": "show_season",
+      "title": "Velvet Meridian",
+      "season": 1,
+      "episodes": [1, 2, 3, 4, 5, 6, 7, 8],
+      "screen_size": "1080p",
+      "release_group": "GROUP",
+      "video_codec": "H.264"
+    }
   }
 ]
